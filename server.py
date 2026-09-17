@@ -511,7 +511,10 @@ def update_apply(info: dict) -> dict:
     # 새 프로세스: 같은 포트를 물려주면 페이지가 그대로 이동할 수 있다 — 이 프로세스가 포트를 놓아야 하므로 새 포트를 준다
     new_port = _free_port()
     # 옛 부트로더(부모)는 자식이 끝난 뒤에도 남는 경우가 있어(실측), 새 인스턴스가 그 pid 를 넘겨받아 정리한다 (+ 옛 임시 폴더)
-    env = dict(os.environ, MABI_PLAYLIST_PORT=str(new_port), MABI_TOKEN=TOKEN, MABI_LITE_REUSE="1",
+    # PyInstaller 부트로더가 자식에게 주는 내부 변수(_PYI_*, _MEIPASS2)를 물려주면 새 exe 가 '이미 풀린 임시 폴더'를 쓰는
+    # 자식 모드로 떠서(우리 옛 임시 폴더 → 곧 삭제됨) 화면 파일을 잃는다 — 반드시 걷어내고 띄운다
+    env = {k: v for k, v in os.environ.items() if not k.startswith(("_PYI", "_MEI"))}
+    env.update(MABI_PLAYLIST_PORT=str(new_port), MABI_TOKEN=TOKEN, MABI_LITE_REUSE="1",
                MABI_OLD_PID=str(os.getppid()), MABI_OLD_MEI=getattr(sys, "_MEIPASS", ""))
     env.pop("MABI_NO_BROWSER", None)
     _lite_release()   # 단일 인스턴스 뮤텍스·lite.json 을 먼저 놓는다
@@ -1073,8 +1076,29 @@ class _Server(ThreadingHTTPServer):
         super().server_bind()
 
 
+def _reexec_if_inherited_mei() -> None:
+    """옛 버전(0.1.x)이 업데이트로 우리를 띄울 때 PyInstaller 내부 변수를 물려줬으면, 우리는 옛 임시 폴더를 빌려 쓰는 상태다
+    (곧 삭제되어 화면 파일이 사라진다). 그 경우 깨끗한 환경으로 자신을 다시 실행하고 끝난다."""
+    if not (FROZEN and LITE_REUSE):
+        return
+    old_mei = os.environ.get("MABI_OLD_MEI", ""); mine = getattr(sys, "_MEIPASS", "")
+    if not (old_mei and mine and os.path.normcase(os.path.abspath(old_mei)) == os.path.normcase(os.path.abspath(mine))):
+        return
+    env = {k: v for k, v in os.environ.items() if not k.startswith(("_PYI", "_MEI"))}
+    try:
+        import subprocess
+        subprocess.Popen([sys.executable], cwd=os.path.dirname(sys.executable), env=env, close_fds=True,
+                         creationflags=0x00000008 | 0x00000200 | 0x01000000)
+        _say("update: inherited temp dir detected — re-executing cleanly")
+    except OSError as e:
+        _say(f"update: re-exec failed: {e}")
+        return
+    os._exit(0)
+
+
 def main() -> None:
     global _srv
+    _reexec_if_inherited_mei()
     os.makedirs(store.DATA_DIR, exist_ok=True)
     if LITE and not _lite_single_instance():
         return
