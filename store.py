@@ -7,8 +7,8 @@ import sys
 import time
 import uuid
 
-# exe(PyInstaller onefile) 로 묶였을 땐 exe 옆에, 소스로 돌릴 땐 이 파일 옆에 data/ 를 둔다
-_BASE = os.path.dirname(sys.executable) if getattr(sys, "frozen", False) else os.path.dirname(os.path.abspath(__file__))
+# 데이터 위치: MABI_DATA_DIR(일렉트론이 앱 폴더를 넘김) > exe 옆(PyInstaller) > 이 파일 옆(소스 실행)
+_BASE = os.environ.get("MABI_DATA_DIR") or (os.path.dirname(sys.executable) if getattr(sys, "frozen", False) else os.path.dirname(os.path.abspath(__file__)))
 DATA_DIR = os.path.join(_BASE, "data")
 FIXTURE_DIR = os.path.join(_BASE, "fixtures")
 

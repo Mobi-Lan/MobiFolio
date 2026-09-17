@@ -18,7 +18,7 @@ from urllib.parse import parse_qs, urlparse
 
 FROZEN = bool(getattr(sys, "frozen", False))
 HERE = os.path.dirname(os.path.abspath(__file__))
-BASE = os.path.dirname(sys.executable) if FROZEN else HERE        # 데이터·로그 위치 (exe 옆)
+BASE = os.environ.get("MABI_DATA_DIR") or (os.path.dirname(sys.executable) if FROZEN else HERE)   # 데이터·로그 위치
 RES = getattr(sys, "_MEIPASS", HERE)                               # 묶인 리소스(ui/) 위치
 if FROZEN:
     # --noconsole 이면 stdout 이 없다 → 로그를 exe 옆 파일로

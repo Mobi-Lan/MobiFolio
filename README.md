@@ -3,7 +3,8 @@
 마비노기 모바일 CLI(`MabinogiMobile_CLI.exe`)로 내 악기·악보를 받아 두고, 재생목록(폴더·검색·초성 색인)을 만들고, 고른 악보를 CLI 로 재생하는 로컬 도구.
 
 ## 실행
-`run.cmd` — 브라우저에 http://127.0.0.1:19997 이 열린다. 인게임 「MM AI 에이전트 활성화」 토글이 켜져 있어야 CLI 가 동작한다(7일 만료).
+- **배포판**: `build.cmd` 로 만든 `dist-electron\악보함-win32-x64\악보함.exe` (일렉트론 창 + 동봉된 파이썬 백엔드 `resources\MabiScoreBox.exe`). 창을 닫으면 백엔드도 종료. 데이터·로그는 `악보함.exe` 옆 `data/`, `mabi-scorebox.log`.
+- **개발**: `run.cmd`(브라우저) 또는 `cd app && npm start`(일렉트론, 루트의 `MabiScoreBox.exe` 나 `server.py` 를 백엔드로 씀). 인게임 「MM AI 에이전트 활성화」 토글이 켜져 있어야 CLI 가 동작한다(7일 만료).
 
 - **갱신**: `get_instruments`, `get_music_scores` 를 CLI 로 받아 `data/` 에 저장(원본은 `fixtures/` 에도). 오프라인이면 마지막 저장분을 쓴다.
 - **재생**: 악보 ▶ → (악기를 골랐으면 `change_instrument`) → `play_music_score`. 「전체 재생」은 `get_activity` 의 `IsAutoPlaying` 을 4초마다 보고 끝나면 다음 곡.

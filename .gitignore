@@ -8,3 +8,5 @@ dist/
 *.log
 MabiScoreBox.exe
 .appwindow-profile/
+app/node_modules/
+dist-electron/
