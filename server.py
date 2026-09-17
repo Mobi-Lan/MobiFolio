@@ -298,6 +298,57 @@ def stop() -> dict:
     return out
 
 
+# ── 길이 스캔: 곡을 잠깐 틀어 TotalDurationSeconds 를 읽고 바로 정지 (CLI 엔 길이 API 가 없다) ──
+_scan = {"running": False, "cancel": False, "total": 0, "done": 0, "found": 0, "current": "", "errors": [], "started": 0.0, "finished": 0.0}
+
+
+def _scan_job(titles: list[str]) -> None:
+    _scan.update({"running": True, "cancel": False, "total": len(titles), "done": 0, "found": 0, "current": "", "errors": [], "started": time.time(), "finished": 0.0})
+    try:
+        for t in titles:
+            if _scan["cancel"]:
+                break
+            _scan["current"] = t
+            r = _cli("play_music_score", {"title": t}, timeout=60)
+            if not r.ok:
+                _scan["errors"].append({"title": t, "error": r.error, "message": r.message}); _scan["done"] += 1
+                if r.error in ("disconnected", "cli_not_found") or r.code == 5:
+                    break
+                continue
+            got = 0.0
+            for _ in range(12):   # 최대 ~3초 동안 Performance 가 뜨길 기다린다
+                time.sleep(0.25)
+                a = _cli("get_activity", timeout=30)
+                perf = (a.body or {}).get("Performance") if isinstance(a.body, dict) else None
+                if isinstance(perf, dict) and perf.get("IsPlaying") and (perf.get("TotalDurationSeconds") or 0) > 0:
+                    got = float(perf["TotalDurationSeconds"]); break
+            if got > 0:
+                store.set_duration(t, got); _scan["found"] += 1
+            else:
+                _scan["errors"].append({"title": t, "error": "no_duration", "message": "재생은 됐지만 길이를 읽지 못함"})
+            st = _cli("stop_action", timeout=60)
+            if st.error == "invalid_state":
+                time.sleep(0.6); _cli("stop_action", timeout=60)
+            _scan["done"] += 1
+            time.sleep(0.4)
+    finally:
+        _scan.update({"running": False, "current": "", "finished": time.time()})
+        _note(cli.CliResult("scan", 0, None, True, None, f"{_scan['found']}/{_scan['total']}곡 길이 확인"), "길이 스캔 종료")
+
+
+def scan_start(titles: list[str] | None) -> dict:
+    if _scan["running"]:
+        return {"ok": False, "error": "already_running", **_scan}
+    have = store.get_durations()
+    if not titles:
+        titles = [lib.pick(raw, lib.TITLE_KEYS) for raw in store.get_cache("scores")["items"] if isinstance(raw, dict)]
+    titles = [t for t in titles if t and t not in have]
+    if not titles:
+        return {"ok": True, "total": 0, "message": "길이를 모르는 곡이 없습니다."}
+    threading.Thread(target=_scan_job, args=(titles,), name="durscan", daemon=True).start()
+    return {"ok": True, "total": len(titles)}
+
+
 class H(SimpleHTTPRequestHandler):
     def __init__(self, *a, **k):
         super().__init__(*a, directory=UI_DIR, **k)
@@ -344,6 +395,9 @@ class H(SimpleHTTPRequestHandler):
             return _json(self, _activity())
         if u.path == "/api/log":
             return _json(self, {"items": _log[:40]})
+        if u.path == "/api/scan":
+            unknown = sum(1 for raw in store.get_cache("scores")["items"] if isinstance(raw, dict) and lib.pick(raw, lib.TITLE_KEYS) not in store.get_durations())
+            return _json(self, {**_scan, "unknown": unknown})
         if u.path == "/api/settings":
             return _json(self, {"settings": store.get_settings(), "cli": cli.probe()})
         if u.path.startswith("/api/cli/"):
@@ -369,6 +423,11 @@ class H(SimpleHTTPRequestHandler):
             return _json(self, lists_op(str(p.get("op", "")), p))
         if u.path == "/api/artists":
             return _json(self, artists_op(str(p.get("op", "")), p))
+        if u.path == "/api/scan":
+            if p.get("op") == "cancel":
+                _scan["cancel"] = True
+                return _json(self, {"ok": True})
+            return _json(self, scan_start(p.get("titles")))
         if u.path == "/api/settings":
             s = store.set_settings(p.get("settings") or {})
             cli.set_exe_override(s.get("cli_exe"))
