@@ -7,8 +7,8 @@
 - **개발**: `run.cmd`(브라우저) 또는 `cd app && npm start`(일렉트론, 루트의 `MabiScoreBox.exe` 나 `server.py` 를 백엔드로 씀). 인게임 「MM AI 에이전트 활성화」 토글이 켜져 있어야 CLI 가 동작한다(7일 만료).
 
 - **갱신**: `get_instruments`, `get_music_scores` 를 CLI 로 받아 `data/` 에 저장(원본은 `fixtures/` 에도). 오프라인이면 마지막 저장분을 쓴다.
-- **재생**: 악보 ▶ → (악기를 골랐으면 `change_instrument`) → `play_music_score`. 「전체 재생」은 `get_activity` 의 `IsAutoPlaying` 을 4초마다 보고 끝나면 다음 곡.
-- **정지**: `get_activity` 확인 후 `stop_action`. `invalid_state` 면 상태 전이 중이라 짧게 재시도.
+- **재생**: 악보 ▶ → (악기를 골랐으면 `change_instrument`) → `play_music_score`. 「전체 재생」은 `get_activity.Performance` 를 1초마다 보고 진행 막대를 그리며, 끝 2초 전(또는 총길이 경과)에 정지하고 다음 곡을 보낸다(연주가 반복 설정이라 스스로 안 끝날 수 있음).
+- **정지**: `get_activity.Performance.IsPlaying` 을 먼저 보고, 연주 중일 때만 `stop_action`(`invalid_state` 면 상태 전이 중이라 짧게 재시도).
 
 ## 규칙 (HANDOFF + 2026-09-17 실측)
 - JSON body 는 `\uXXXX` 이스케이프한 **순수 ASCII JSON** 으로 보낸다 — 콘솔 코드페이지와 무관하고 base64 가 필요 없다 (실측: `play_music_score {"title": "악보…"}` → `Play started`). raw 문자열(`write_chat`)의 비ASCII 만 `base64:`.
