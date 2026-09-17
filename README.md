@@ -6,7 +6,8 @@
 
 ## 실행
 - **배포판**: `build.cmd` 로 만든 `dist-electron\MobiFolio-win32-x64\MobiFolio.exe` (창 제목·바로가기는 「모비폴리오」; 폴더·실행파일명은 유니코드 정규화 문제를 피하려고 ASCII) (일렉트론 창 + 동봉된 파이썬 백엔드 `resources\MobiFolioCore.exe`). 창을 닫으면 백엔드에 정상 종료를 요청하고, 안 끝나면 강제 종료한다. 셸이 강제로 죽어도 백엔드는 부모 프로세스를 감시해 스스로 끝난다. **데이터·로그는 사용자 폴더 `%LOCALAPPDATA%\MobiFolio`** (`data/`, `fixtures/`, `mobifolio.log`(2MB 넘으면 새로 시작), `electron.log`) — 배포판·개발 실행이 같은 저장소를 쓰고, 재빌드·폴더 교체에 영향받지 않는다. 예전 위치(이전 이름 시절의 `%LOCALAPPDATA%\MabiScoreBox`, 앱 폴더·프로젝트 폴더의 `data/`)가 있으면 첫 실행 때 한 번 병합해 옮긴다 — 아티스트 지정·곡 길이·최근 재생·재생목록은 합집합, 설정·캐시는 최신본 (`data/migrated.json` 에 출처 기록). `MABI_DATA_DIR` 환경변수로 위치를 강제할 수 있다(테스트용).
-- **개발**: `run.cmd`(파이썬 백엔드가 Edge/Chrome 앱 창을 직접 연다) 또는 `cd app && npm start`(일렉트론, 루트의 `MobiFolioCore.exe` 나 `server.py` 를 백엔드로 씀. 이미 떠 있는 백엔드가 있으면 거기에 붙는다). 인게임 「MM AI 에이전트 활성화」 토글이 켜져 있어야 CLI 가 동작한다(7일 만료).
+- **개발**: `run.cmd`(파이썬 백엔드가 Edge/Chrome 앱 창을 직접 연다) 또는 `cd app && npm start`(일렉트론, 루트의 `MobiFolioCore.exe` 나 `server.py` 를 백엔드로 씀. 이미 떠 있는 백엔드가 있으면 거기에 붙는다). 인게임 「마비노기 모바일 AI 커넥터」 토글(환경 설정 → 게임 → AI 제어)이 켜져 있어야 CLI 가 동작한다(일주일간 쓰지 않으면 게임이 자동으로 끈다).
+- **데모**: `demo.cmd` — 게임도 CLI 도 없이 UI 를 띄운다(가짜 CLI `demo_cli.py` + 데모 데이터 폴더 `%LOCALAPPDATA%\MobiFolio-demo`). 악보·아티스트 이름은 전부 지어낸 것이라 홍보물 스크린샷에 그대로 써도 된다. `MABI_DEMO=1` 은 배포판(frozen)에서는 무시된다.
 - **빌드 요구**: Python 3.12 (pyinstaller 는 `build.cmd` 가 설치), Node.js/npm. 포트 `19997` 을 쓴다. `build.cmd --nopause` 로 멈춤 없이 실행. 빌드 전에 앱을 닫아야 한다(실행 중이면 중단).
 
 ## 기능

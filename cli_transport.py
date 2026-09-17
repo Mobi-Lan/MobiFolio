@@ -17,6 +17,10 @@ import time
 from dataclasses import dataclass, field
 
 CREATE_NO_WINDOW = 0x08000000
+# 데모 모드: 게임·CLI 없이 demo_cli.py 의 가짜 응답으로 UI 를 띄운다 (시연·스크린샷).
+# 배포판(frozen)에서는 환경변수가 있어도 켜지지 않는다.
+DEMO = os.environ.get("MABI_DEMO") == "1" and not getattr(sys, "frozen", False)
+DEMO_EXE = r"C:\Nexon\MabinogiMobile\MabinogiMobile_CLI.exe"
 EXE_CANDIDATES = [
     os.environ.get("MABI_CLI_EXE", "") if not getattr(sys, "frozen", False) or os.environ.get("MABI_DEV") == "1" else "",   # 배포판은 개발용 환경변수 무시
     r"C:\Nexon\MabinogiMobile\MabinogiMobile_CLI.exe",
@@ -53,6 +57,8 @@ def set_exe_override(path) -> None:
 
 def find_exe() -> str | None:
     """존재하는 실행파일 경로. 설정 지정 > MABI_CLI_EXE > 기본 설치 경로."""
+    if DEMO:
+        return DEMO_EXE
     if _override and os.path.exists(_override):
         return _override
     for c in EXE_CANDIDATES:
@@ -117,10 +123,24 @@ def _read_last_response(since: float) -> object | None:
 
 
 def call(command: str, body: str | dict | list | None = None, timeout: float = 660.0) -> CliResult:
+    if DEMO:
+        import demo_cli
+        t0 = time.time()
+        code, parsed = demo_cli.respond(command, body)
+        res = CliResult(command, code, parsed, False, None, "",
+                        json.dumps(parsed, ensure_ascii=False), time.time() - t0, "demo")
+        if code != 0:
+            res.error = EXIT_MEANING.get(code, f"exit_{code}")
+        elif isinstance(parsed, dict) and "error" in parsed:
+            res.error, res.message = str(parsed["error"]), str(parsed.get("message", ""))
+        else:
+            res.ok = True
+            res.message = str(parsed.get("message", "")) if isinstance(parsed, dict) else ""
+        return res
     exe = find_exe()
     if exe is None:
         return CliResult(command, -1, None, False, "cli_not_found",
-                         "MabinogiMobile_CLI.exe 를 찾지 못했습니다. 인게임 'MM AI 에이전트 활성화' 토글을 켜면 설치됩니다.")
+                         "MabinogiMobile_CLI.exe 를 찾지 못했습니다. 게임의 환경 설정 > 게임 > AI 제어에서 '마비노기 모바일 AI 커넥터' 를 켜면 설치됩니다.")
     args = [exe, command]
     enc = encode_body(body)
     if enc is not None:
