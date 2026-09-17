@@ -128,8 +128,9 @@ async function stopBackend() {
   const pid = backend.pid;
   // 1) 정상 종료 요청 (PyInstaller onefile 이 임시 폴더를 스스로 치우게)  2) 안 끝나면 트리째 강제 종료 (우리가 띄운 PID 만)
   await req("POST", "/api/quit", 800);
-  for (let i = 0; i < 15 && backend; i++) await sleep(100);
-  if (backend) { try { spawnSync("taskkill", ["/PID", String(pid), "/T", "/F"], { windowsHide: true, stdio: "ignore" }); } catch {} }
+  // PyInstaller onefile 은 자식이 끝난 뒤 부모(부트로더)가 %TEMP%\_MEI* 를 지우고 나서야 종료한다 — 그 시간을 충분히 준다 (최대 10초)
+  for (let i = 0; i < 100 && backend; i++) await sleep(100);
+  if (backend) { log("[mobifolio] backend did not exit in 10s — killing"); try { spawnSync("taskkill", ["/PID", String(pid), "/T", "/F"], { windowsHide: true, stdio: "ignore" }); } catch {} }
   backend = null;
 }
 
