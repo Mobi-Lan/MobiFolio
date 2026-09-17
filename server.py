@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import errno
+import secrets
 import hashlib
 import hmac
 import base64
@@ -55,15 +56,29 @@ store.migrate_legacy([os.path.join(os.environ["LOCALAPPDATA"], "MabiScoreBox") i
                       os.path.dirname(os.path.dirname(sys.executable)) if FROZEN else None,   # 패키지: resources\.. = 앱 폴더
                       HERE if not FROZEN else None])
 
-PORT = int(os.environ.get("MABI_PLAYLIST_PORT", "19997"))
-TOKEN = os.environ.get("MABI_TOKEN", "")   # 셸이 실행마다 만들어 넘기는 비밀 — 있으면 모든 API 가 이 값을 요구한다
+# 경량판(LITE): 일렉트론 셸 없이 이 exe 를 바로 실행한 경우 — 스스로 빈 포트·토큰을 만들고 Edge/Chrome 앱 창을 띄운다
+LITE = FROZEN and not os.environ.get("MABI_PARENT_PID") and not os.environ.get("MABI_NO_BROWSER")
+
+
+def _free_port() -> int:
+    s = socket.socket(); s.bind(("127.0.0.1", 0)); p = s.getsockname()[1]; s.close(); return p
+
+
+PORT = int(os.environ.get("MABI_PLAYLIST_PORT") or (_free_port() if LITE else 19997))
+TOKEN = os.environ.get("MABI_TOKEN", "") or (secrets.token_hex(24) if LITE else "")   # 셸(또는 경량판 스스로)이 실행마다 만드는 비밀 — 있으면 모든 API 가 이 값을 요구한다
 PARENT = os.environ.get("MABI_PARENT_PID", "")
+LITE_FILE = os.path.join(BASE, "lite.json")   # 경량판이 떠 있는 포트 (두 번째 실행이 창만 다시 열 때 씀)
 VERSION = "0.1.0"
 _srv = None   # ThreadingHTTPServer (종료용)
 
 
 def _shutdown() -> None:
     time.sleep(0.2)
+    if LITE:
+        try:
+            os.remove(LITE_FILE)   # 서버를 멈추기 전에 먼저 지운다 (멈추는 중 예외가 나도 기록이 남지 않게)
+        except OSError:
+            pass
     try:
         if _srv:
             _srv.shutdown()
@@ -621,8 +636,10 @@ class H(SimpleHTTPRequestHandler):
             return False
         if self.headers.get("X-Requested-With") != "mobifolio":
             return False
-        if TOKEN:   # 배포판: 실행마다 다른 토큰 — 페이지(index.html)와 셸만 안다
-            return hmac.compare_digest(self.headers.get("X-MobiFolio-Token") or "", TOKEN)
+        if TOKEN and not hmac.compare_digest(self.headers.get("X-MobiFolio-Token") or "", TOKEN):   # 배포판: 실행마다 다른 토큰 — 페이지(index.html)와 셸만 안다
+            return False
+        global _last_ui
+        _last_ui = time.time()   # 살아 있는 UI 의 심장박동
         return True
 
     def do_POST(self):
@@ -637,6 +654,12 @@ class H(SimpleHTTPRequestHandler):
 
     def _post(self):
         u = urlparse(self.path)
+        if u.path == "/api/bye":   # 페이지 닫힘 신호 (sendBeacon 은 헤더를 못 붙이므로 토큰은 본문으로)
+            p = _read_json(self)
+            if not TOKEN or hmac.compare_digest(str(p.get("token") or ""), TOKEN):
+                global _bye_at
+                _bye_at = time.time()
+            return _json(self, {"ok": True})
         if not self._guard():
             return _json(self, {"ok": False, "error": "forbidden", "message": "허용되지 않은 출처의 요청입니다."}, 403)
         p = _read_json(self)
@@ -705,28 +728,71 @@ def _find_app_browser() -> str | None:
     return None
 
 
+def _launch_app_window(url: str):
+    """Edge/Chrome 앱 창(주소창 없음, 전용 프로필)을 띄우고 프로세스 핸들을 돌려준다. 없으면 기본 브라우저 탭(None)."""
+    exe = _find_app_browser()
+    if exe:
+        profile = os.path.join(BASE, ".appwindow-profile")
+        args = [exe, f"--app={url}", "--window-size=1280,860", f"--user-data-dir={profile}",
+                "--no-first-run", "--no-default-browser-check", "--disable-extensions", "--disable-features=TranslateUI,msEdgeStartupBoost"]
+        try:
+            import subprocess
+            return subprocess.Popen(args, creationflags=0x00000008)   # DETACHED_PROCESS
+        except OSError:
+            pass
+    import webbrowser
+    webbrowser.open(url)
+    return None
+
+
 def _open_window() -> None:
-    """브라우저 탭이 아니라 앱 창으로 연다. 전용 프로필을 써서 사용자의 Edge 세션과 섞이지 않는다."""
+    """브라우저 탭이 아니라 앱 창으로 연다. 경량판은 창이 닫히면(브라우저 프로세스 종료) 서버도 끝낸다."""
     if os.environ.get("MABI_NO_BROWSER"):
         return
     url = f"http://127.0.0.1:{PORT}"
 
-    def go():
-        exe = _find_app_browser()
-        if exe:
-            profile = os.path.join(BASE, ".appwindow-profile")
-            args = [exe, f"--app={url}", "--window-size=1280,860", f"--user-data-dir={profile}",
-                    "--no-first-run", "--no-default-browser-check", "--disable-features=TranslateUI"]
-            try:
-                import subprocess
-                subprocess.Popen(args, creationflags=0x00000008)   # DETACHED_PROCESS
-                return
-            except OSError:
-                pass
-        import webbrowser
-        webbrowser.open(url)
+    threading.Thread(target=lambda: _launch_app_window(url), daemon=True).start()
+    if LITE:
+        threading.Thread(target=_lite_watchdog, daemon=True).start()
 
-    threading.Timer(0.6, go).start()
+
+_last_ui = time.time()   # UI 가 마지막으로 요청한 시각 (경량판 종료 판정)
+_bye_at = 0.0            # 페이지가 닫히며 보낸 신호 시각
+
+
+def _lite_watchdog() -> None:
+    """경량판: 창이 닫히면 페이지가 /api/bye 를 보내고(2초 안에 다시 열리지 않으면 종료), 신호를 못 받아도 UI 요청이 25초 없으면 종료.
+    (Edge 는 실행 직후 프로세스를 갈아타서 프로세스 핸들로는 창 닫힘을 알 수 없다 — 그래서 페이지 쪽 신호를 쓴다)"""
+    while True:
+        time.sleep(1.0)
+        now = time.time()
+        if _bye_at and now - _bye_at > 2.0 and _last_ui <= _bye_at:
+            print("[lite] window closed — exiting", flush=True); _shutdown()
+        if now - _last_ui > 25.0:
+            print("[lite] no UI heartbeat for 25s — exiting", flush=True); _shutdown()
+
+
+def _lite_single_instance() -> bool:
+    """경량판 중복 실행: 이미 떠 있으면 그 포트로 창만 하나 더 열고 False. 처음이면 lite.json 에 포트를 적고 True."""
+    try:
+        import ctypes
+        k32 = ctypes.windll.kernel32
+        k32.CreateMutexW(None, False, "Local\\MobiFolioLite")
+        if k32.GetLastError() == 183:   # ERROR_ALREADY_EXISTS
+            try:
+                with open(LITE_FILE, encoding="utf-8") as f:
+                    port = int(json.load(f).get("port", 0))
+                import urllib.request
+                urllib.request.urlopen(f"http://127.0.0.1:{port}/api/health", timeout=2).read()
+                _launch_app_window(f"http://127.0.0.1:{port}")
+                return False
+            except Exception:
+                pass   # 죽은 기록이면 그냥 새로 뜬다
+        with open(LITE_FILE, "w", encoding="utf-8") as f:
+            json.dump({"port": PORT, "pid": os.getpid()}, f)
+    except Exception as e:
+        print(f"[lite] single-instance check failed: {e}", flush=True)
+    return True
 
 
 _open_browser = _open_window   # 이전 이름 호환
@@ -765,6 +831,8 @@ class _Server(ThreadingHTTPServer):
 def main() -> None:
     global _srv
     os.makedirs(store.DATA_DIR, exist_ok=True)
+    if LITE and not _lite_single_instance():
+        return
     try:
         srv = _Server(("127.0.0.1", PORT), H)
         _srv = srv

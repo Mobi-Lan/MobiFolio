@@ -192,6 +192,7 @@ dialog{background:var(--card);color:var(--ink);border:1px solid var(--line);bord
 const $=(id)=>document.getElementById(id);
 const TOKEN="__MOBIFOLIO_TOKEN__";   // 서버가 index.html 을 낼 때 실행 토큰으로 바꿔 넣는다 (배포판)
 $("dlgCancel").onclick=()=>$("dlg").close("cancel");
+window.addEventListener("pagehide",()=>{try{navigator.sendBeacon("/api/bye",new Blob([JSON.stringify({token:TOKEN})],{type:"application/json"}));}catch{}});   // 경량판: 창을 닫으면 백엔드도 끝나게
 const api=async(path,body)=>{try{const r=await fetch(path,{method:body?"POST":"GET",headers:{"Content-Type":"application/json","X-Requested-With":"mobifolio","X-MobiFolio-Token":TOKEN},body:body?JSON.stringify(body):undefined});const j=await r.json();if(j&&typeof j==="object"&&!("ok"in j)&&r.ok)return j;if(!r.ok&&j&&typeof j==="object"&&!("ok"in j))j.ok=false;return j;}catch(e){return {ok:false,error:"network",message:String(e.message||e)};}};
 function toast(msg,ms=5000){const t=$("toast");t.textContent=msg;t.hidden=false;clearTimeout(t._t);t._t=setTimeout(()=>{t.hidden=true;},ms);}
 window.addEventListener("unhandledrejection",(e)=>{toast("오류: "+(e.reason&&e.reason.message||e.reason||"알 수 없음"));});

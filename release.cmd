@@ -16,6 +16,8 @@ xcopy /e /i /q /y "%SRC%" "%OUT%\MobiFolio-win32-x64" >nul || goto :fail
 if exist "%OUT%\MobiFolio-%VER%-portable.zip" del /q "%OUT%\MobiFolio-%VER%-portable.zip"
 powershell -NoProfile -Command "Compress-Archive -Path '%OUT%\MobiFolio-win32-x64\*' -DestinationPath '%OUT%\MobiFolio-%VER%-portable.zip' -CompressionLevel Optimal" || goto :fail
 echo portable zip OK
+rem 1b) lite edition: single exe (build.cmd produces dist\MobiFolioLite.exe)
+if exist "dist\MobiFolioLite.exe" ( copy /y "dist\MobiFolioLite.exe" "%OUT%\MobiFolioLite-%VER%.exe" >nul && echo lite exe OK ) else ( echo lite exe missing - run build.cmd )
 rem 2) installer (electron-builder wraps the prepackaged folder; fuses/icon/metadata are kept as built)
 cd app
 call npm run installer
