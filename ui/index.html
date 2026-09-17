@@ -100,6 +100,7 @@ dialog::backdrop{background:rgba(0,0,0,.55)}
     <div class="chd">지금 재생</div>
     <div class="cbd" style="display:flex;flex-direction:column;gap:12px">
       <div class="now"><div class="lbl">악보</div><div class="title" id="nowTitle">—</div>
+        <div style="height:5px;background:#0b0f14;border-radius:3px;overflow:hidden;margin:2px 0 10px"><div id="prog" style="height:100%;width:0%;background:var(--gold);transition:width .5s linear"></div></div>
         <div style="display:flex;gap:6px;align-items:center"><select id="inst" style="flex:1"><option value="">악기 그대로</option></select><button id="btnStop">■ 정지</button></div>
         <div class="note" id="actText" style="margin-top:8px">상태 —</div></div>
       <div><div class="note" style="margin-bottom:6px">최근 CLI 응답</div><div class="log" id="log">—</div></div>
@@ -221,14 +222,32 @@ async function delArtist(a){if(!confirm(`「${a.name}」 등록을 지우고 곡
 $("btnRenameArtist").onclick=()=>{const a=(state.artists.artists||[]).find((x)=>x.key===state.view.key);if(a)registerOrRename(a);};
 
 // ── 재생 ──
+const fmtSec=(s)=>{s=Math.max(0,Math.floor(s||0));return `${Math.floor(s/60)}:${String(s%60).padStart(2,"0")}`;};
 async function playOne(title){state.queue=[];state.qi=-1;await sendPlay(title);}
-async function sendPlay(title){$("nowTitle").textContent=title;$("actText").textContent="전송 중…";const r=await api("/api/play",{title,instrument:$("inst").value||null});log(r);
-  $("actText").textContent=r.ok?"재생 명령 수락":"실패: "+(r.steps.at(-1)?.error||"")+" "+(r.steps.at(-1)?.message||"");state.playing=r.ok;if(r.ok)startPoll();}
+async function sendPlay(title){$("nowTitle").textContent=title;$("actText").textContent="전송 중…";$("prog").style.width="0%";state.advancing=false;
+  const r=await api("/api/play",{title,instrument:$("inst").value||null});log(r);
+  $("actText").textContent=r.ok?"재생 시작":"실패: "+(r.error||r.steps.at(-1)?.error||"")+" "+(r.message||r.steps.at(-1)?.message||"");
+  state.playing=r.ok;state.startedAt=Date.now();if(r.ok)startPoll();else if(state.qi>=0)advance();}
 async function playAll(){const pl=state.lists.playlists.find((p)=>p.id===state.view.id);if(!pl||!pl.items.length)return;state.queue=[...pl.items];state.qi=0;await sendPlay(state.queue[0]);}
-function startPoll(){clearInterval(state.pollT);state.pollT=setInterval(pollAct,4000);}
-async function pollAct(){const a=await api("/api/activity");const b=a.body||{};const playing=!!b.IsAutoPlaying;$("actText").textContent=`${playing?"재생 중":"대기"} · 버튼 ${b.MainButtonState||"?"}`;
-  if(!playing&&state.playing){state.playing=false;if(state.qi>=0&&state.qi<state.queue.length-1){state.qi++;await sendPlay(state.queue[state.qi]);return;}clearInterval(state.pollT);}}
-$("btnStop").onclick=async()=>{state.queue=[];state.qi=-1;const r=await api("/api/stop",{});log(r);$("actText").textContent=r.ok?"정지됨":"정지 실패 — 잠시 후 다시";state.playing=false;clearInterval(state.pollT);};
+function startPoll(){clearInterval(state.pollT);state.pollT=setInterval(pollAct,1000);}
+async function advance(){ // 다음 곡 (재생목록 전체 재생 중일 때만)
+  if(state.advancing)return;state.advancing=true;
+  if(state.qi>=0&&state.qi<state.queue.length-1){state.qi++;await sendPlay(state.queue[state.qi]);}
+  else{clearInterval(state.pollT);state.playing=false;state.qi=-1;$("actText").textContent="재생목록 끝";$("prog").style.width="0%";state.advancing=false;}}
+async function pollAct(){
+  const a=await api("/api/activity");const b=a.body||{};const p=b.Performance||{};
+  if(p.IsPlaying){
+    const tot=p.TotalDurationSeconds||0,el=p.ElapsedSeconds||0,localEl=(Date.now()-(state.startedAt||Date.now()))/1000;
+    $("actText").textContent=`재생 중 · ${p.MusicTitle||""} · ${fmtSec(el)} / ${fmtSec(tot)}${p.IsLoop?" · 반복":""} · ${p.InstrumentName||""}`;
+    $("prog").style.width=(tot?Math.min(100,el/tot*100):0)+"%";
+    // 게임 연주는 반복(IsLoop) 이라 스스로 안 끝난다 → 끝 2초 전(또는 총길이 경과)에 정지하고 다음 곡
+    if(state.qi>=0&&tot&&!state.advancing&&((tot-el)<=2.0||localEl>=tot-1)){await api("/api/stop",{});await advance();}
+  }else{
+    $("prog").style.width="0%";
+    if(state.playing){state.playing=false;$("actText").textContent="연주 종료";if(state.qi>=0){await advance();return;}clearInterval(state.pollT);}
+    else $("actText").textContent="대기";
+  }}
+$("btnStop").onclick=async()=>{state.queue=[];state.qi=-1;const r=await api("/api/stop",{});log(r);$("actText").textContent=r.ok?(r.message||"정지됨"):"정지 실패 — 잠시 후 다시";state.playing=false;clearInterval(state.pollT);$("prog").style.width="0%";};
 $("btnPlayAll").onclick=playAll;
 
 // ── 재생목록·폴더 ──

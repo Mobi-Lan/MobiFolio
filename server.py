@@ -42,10 +42,13 @@ def _read_json(handler) -> dict:
     n = int(handler.headers.get("Content-Length") or 0)
     if n <= 0:
         return {}
-    try:
-        return json.loads(handler.rfile.read(n).decode("utf-8"))
-    except Exception:
-        return {}
+    raw = handler.rfile.read(n)
+    for enc in ("utf-8", "mbcs"):   # 브라우저는 utf-8. 콘솔 도구가 cp949 로 보내도 조용히 빈 값이 되지 않게
+        try:
+            return json.loads(raw.decode(enc))
+        except Exception:
+            continue
+    return {"_decode_error": True}
 
 
 def _cli(command, body=None, timeout=660.0):
@@ -197,6 +200,8 @@ def artists_op(op: str, p: dict) -> dict:
 # ── 재생·정지 ──
 def play(title: str, instrument: str | None) -> dict:
     out = {"ok": True, "steps": []}
+    if not (title or "").strip():
+        return {"ok": False, "steps": [], "error": "empty_title", "message": "재생할 악보 제목이 비어 있습니다 (요청 인코딩 확인)."}
     if instrument:
         r = _cli("change_instrument", {"name": instrument}, timeout=120)
         out["steps"].append(r.to_dict())
@@ -210,11 +215,17 @@ def play(title: str, instrument: str | None) -> dict:
 
 
 def stop() -> dict:
+    """연주 정지. get_activity.Performance.IsPlaying 이 false 면 정지할 게 없으니 성공으로 본다(invalid_state 재시도 낭비 방지).
+    연주 중인데 invalid_state 가 오면 상태 전이 중(§7-1) 이라 짧게 재시도."""
     out = {"ok": False, "steps": []}
+    a = _cli("get_activity", timeout=30)
+    out["steps"].append(a.to_dict())
+    perf = (a.body or {}).get("Performance") if isinstance(a.body, dict) else None
+    if isinstance(perf, dict) and not perf.get("IsPlaying"):
+        out["ok"] = True
+        out["message"] = "재생 중인 곡이 없습니다."
+        return out
     for attempt in range(4):
-        a = _cli("get_activity", timeout=30)
-        out["steps"].append(a.to_dict())
-        state = a.body.get("MainButtonState") if isinstance(a.body, dict) else None
         r = _cli("stop_action", timeout=60)
         out["steps"].append(r.to_dict())
         if r.ok:
@@ -222,7 +233,7 @@ def stop() -> dict:
             return out
         if r.error != "invalid_state":
             return out
-        time.sleep(1.5 if state != "Stop" else 0.5)   # 상태 전이 중(§7-1) — 짧은 백오프
+        time.sleep(1.0 + attempt * 0.5)
     return out
 
 

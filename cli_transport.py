@@ -56,9 +56,13 @@ def _decode(b: bytes) -> str:
 
 
 def encode_body(body: str | dict | list | None) -> str | None:
+    """JSON body 는 \\uXXXX 이스케이프로 순수 ASCII 화한다 — 콘솔 코드페이지와 무관하고 base64 도 필요 없다
+    (실측: play_music_score 에 {"title": "\\uc545\\ubcf4…"} → Play started). raw 문자열의 비ASCII 만 base64."""
     if body is None:
         return None
-    s = body if isinstance(body, str) else json.dumps(body, ensure_ascii=False, separators=(",", ":"))
+    if isinstance(body, (dict, list)):
+        return json.dumps(body, ensure_ascii=True)
+    s = body
     if s == "":
         return ""
     if all(ord(ch) < 128 for ch in s):
