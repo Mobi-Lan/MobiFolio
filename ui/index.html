@@ -52,7 +52,7 @@ svg.i.s{width:14px;height:14px;stroke-width:1.8}svg.i.l{width:20px;height:20px}
 .idx{display:flex;flex-wrap:wrap;gap:2px}.idx span{font-family:var(--mono);font-size:11px;padding:2px 5px;border-radius:5px;color:var(--muted);cursor:pointer}.idx span:hover{color:var(--ink2)}.idx span.on{background:var(--gold);color:#1a1608;font-weight:600}.idx span.zero{opacity:.3;cursor:default}
 .badge{font-size:10.5px;padding:1px 6px;border-radius:4px;font-weight:600;white-space:nowrap;margin-left:6px}
 .badge.dup{background:rgba(232,138,166,.16);color:var(--pink)}.badge.play{background:rgba(226,184,102,.16);color:var(--gold)}.badge.man{border:1px solid var(--line);color:var(--muted);font-weight:500}.badge.tag{background:rgba(122,162,232,.14);color:var(--blue)}.badge.var{background:rgba(95,199,164,.14);color:var(--green)}.badge.eq{background:rgba(95,199,164,.14);color:var(--green);font-weight:500}
-.row{display:grid;grid-template-columns:16px 22px 1fr 140px 48px auto;gap:10px;align-items:center;padding:7px 10px;border-bottom:1px solid var(--line2);cursor:default}
+.row{display:grid;grid-template-columns:16px 22px 1fr 140px 48px auto;gap:10px;align-items:center;padding:7px 10px;border-bottom:1px solid var(--line2);cursor:default;user-select:none}
 .row.pl{grid-template-columns:14px 16px 22px 1fr 130px 132px 48px auto}
 .row:hover{background:#1a2230}.row.sel{background:rgba(226,184,102,.07)}
 .row .no{font-family:var(--mono);font-size:11px;color:var(--faint)}
@@ -310,7 +310,9 @@ function rowHtml(it,i){const playing=S.now&&S.now.title===it.title&&S.playing;co
     <span class="acts"><button class="ic pri" data-play="${esc(it.title)}" title="재생">${ICON("play","s")}</button><button class="ic" data-add="${esc(it.title)}" title="재생목록에 담기">${ICON("plus","s")}</button><button class="ic dim" data-more="${esc(it.title)}">${ICON("more","s")}</button></span></div>`;}
 function bindRows(items){const M=$("mid");
   M.querySelectorAll(".row[data-t]").forEach((r)=>r.onclick=(e)=>{if(e.target.closest("button,input"))return;S.sel=r.dataset.t;renderSel();M.querySelectorAll(".row.sel").forEach((x)=>x.classList.remove("sel"));r.classList.add("sel");});
-  M.querySelectorAll("[data-play]").forEach((b)=>b.onclick=()=>{const list=items.map((it)=>({title:it.title,inst:it.plInst||""}));playFrom(list,list.findIndex((x)=>x.title===b.dataset.play),S.view.kind==="pl"?"pl:"+S.view.id:"view");});
+  const playTitle=(t)=>{if(S.switching)return;const list=items.map((it)=>({title:it.title,inst:it.plInst||""}));playFrom(list,list.findIndex((x)=>x.title===t),S.view.kind==="pl"?"pl:"+S.view.id:"view");};
+  M.querySelectorAll("[data-play]").forEach((b)=>b.onclick=()=>playTitle(b.dataset.play));
+  M.querySelectorAll(".row[data-t]").forEach((r)=>r.ondblclick=(e)=>{if(e.target.closest("button,input,.dd"))return;e.preventDefault();window.getSelection()?.removeAllRanges();playTitle(r.dataset.t);});
   M.querySelectorAll("[data-add]").forEach((b)=>b.onclick=(e)=>addMenu(e,[b.dataset.add]));
   M.querySelectorAll("[data-more]").forEach((b)=>b.onclick=(e)=>rowMenu(e,b.dataset.more));
   M.querySelectorAll("[data-ck]").forEach((c)=>c.onchange=()=>{c.checked?S.selected.add(c.dataset.ck):S.selected.delete(c.dataset.ck);renderMid();});
