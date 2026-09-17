@@ -109,6 +109,7 @@ dialog{background:var(--card);color:var(--ink);border:1px solid var(--line);bord
 .rcol #queueCard{flex:1;min-height:120px}
 .status.btn{cursor:pointer;padding:4px 8px;border-radius:7px;border:1px solid transparent}.status.btn:hover{border-color:var(--line);color:var(--ink2)}
 #logDlg{width:min(760px,92vw);padding:0}#logDlg .chd{border-radius:12px 12px 0 0}#logDlg #logBody{max-height:70vh;overflow:auto;padding:10px 12px}
+#updBar{display:flex;align-items:center;gap:10px;padding:7px 16px;background:var(--goldwash);border-bottom:1px solid var(--goldline);font-size:12.5px;color:var(--strong)}
 .frm{display:grid;grid-template-columns:150px 1fr;gap:10px 12px;align-items:center;font-size:13px}.frm label{color:var(--muted)}.frm .hint{grid-column:2;font-size:11.5px;color:var(--faint);margin-top:-6px}
 </style>
 </head>
@@ -138,6 +139,7 @@ dialog{background:var(--card);color:var(--ink);border:1px solid var(--line);bord
   <button class="pri" id="btnSync"><svg class="i s"><use href="#ic-refresh"/></svg>갱신</button>
 </div>
 
+<div id="updBar" hidden><span id="updText"></span><span class="grow"></span><button class="small pri" id="updGo">지금 업데이트</button><button class="small ghost" id="updLater">나중에</button></div>
 <div class="grid">
   <div class="card"><div class="chd">보관함<span class="grow"></span><button class="small ghost" id="btnNewFolder"><svg class="i s"><use href="#ic-folder"/></svg>폴더</button><button class="small pri" id="btnNewList"><svg class="i s"><use href="#ic-plus"/></svg>목록</button></div><div class="cbd tree" id="tree"></div></div>
 
@@ -183,9 +185,12 @@ dialog{background:var(--card);color:var(--ink);border:1px solid var(--line);bord
     <label>다음 곡 전환 여유(초)</label><input id="sMargin" type="number" min="0" max="15" step="0.5" style="width:120px">
     <span class="hint">게임 연주가 반복 설정이면 곡이 스스로 안 끝나서, 끝나기 이만큼 전에 정지하고 다음 곡을 보냅니다.</span>
     <label>재생 전 현재 연주 정지</label><label style="color:var(--ink2);display:flex;gap:8px;align-items:center"><input type="checkbox" id="sStop"> 켜기</label>
+    <label>업데이트 확인 주소</label><input id="sUpdUrl" placeholder="https://…/latest.json (경량판 자동 업데이트)">
+    <span class="hint">비우면 확인하지 않습니다. 앱은 이 주소의 작은 JSON 만 읽고, 아무 정보도 보내지 않습니다.</span>
+    <label>시작 시 업데이트 확인</label><label style="color:var(--ink2);display:flex;gap:8px;align-items:center"><input type="checkbox" id="sUpdChk"> 새 버전이 있으면 상단에 알림</label>
     <label>시작 시 자동 갱신</label><label style="color:var(--ink2);display:flex;gap:8px;align-items:center"><input type="checkbox" id="sAuto"> CLI 연결돼 있으면 악기·악보를 다시 받음</label>
   </div>
-  <div style="display:flex;justify-content:flex-end;gap:6px;margin-top:14px"><button id="sTest" class="ghost" title="위 경로로 CLI 를 호출해 봅니다 (저장하지 않음)">연결 확인</button><button id="sSave" class="pri">저장</button></div>
+  <div style="display:flex;justify-content:flex-end;gap:6px;margin-top:14px"><button id="sUpdNow" class="ghost" title="저장된 주소로 지금 확인">업데이트 확인</button><button id="sTest" class="ghost" title="위 경로로 CLI 를 호출해 봅니다 (저장하지 않음)">연결 확인</button><button id="sSave" class="pri">저장</button></div>
 </dialog>
 
 <script>
@@ -557,16 +562,29 @@ $("btnSync").onclick=async()=>{const b=$("btnSync"),html=b.innerHTML;b.disabled=
   finally{b.disabled=false;b.innerHTML=html;}};
 $("btnReport").onclick=async()=>{const d=await api("/api/normalize");const s=d.summary;$("repMeta").textContent=`${s.count}곡 · 인식 ${s.count-s.other} · 기타 ${s.other}`;$("repBody").textContent=d.rows.map((r)=>`${r.bucket==="other"?"기타":"인식"} ${r.rule.padEnd(6)} | ${r.title}\n      → 아티스트 [${r.artist}] 곡 [${r.song}]${r.variant?` 변형 ${r.variant}`:""}${r.tags.length?` 태그 ${r.tags.join(",")}`:""}${r.removed.length?` 제거 ${r.removed.join(" ")}`:""}`).join("\n");$("rep").showModal();};
 let sInst="";
-$("btnSettings").onclick=async()=>{const d=await api("/api/settings");const s=d.settings;$("sCli").value=s.cli_exe||"";$("sGap").value=s.gap_sec;$("sMargin").value=s.advance_margin;$("sStop").checked=!!s.stop_before_play;$("sAuto").checked=!!s.auto_sync;sInst=s.default_inst||"";
+$("btnSettings").onclick=async()=>{const d=await api("/api/settings");const s=d.settings;$("sCli").value=s.cli_exe||"";$("sUpdUrl").value=s.update_url||"";$("sUpdChk").checked=!!s.update_check;$("sGap").value=s.gap_sec;$("sMargin").value=s.advance_margin;$("sStop").checked=!!s.stop_before_play;$("sAuto").checked=!!s.auto_sync;sInst=s.default_inst||"";
   ddMake($("sInstDd"),instItemsSet,()=>sInst,(v)=>{sInst=v;});$("sCliHint").textContent=cliHint(d.cli);$("set").showModal();$("sCli").focus();};
 const cliHint=(c)=>!c?"—":c.found?`감지된 경로: ${c.exe} · ${c.pipe==="connected"?"연결됨":"끊김 "+(c.reason||c.status_error||"")}${c.override_invalid?" · 설정한 경로가 없어 기본 경로를 씁니다":""}`:"실행파일을 찾지 못했습니다";
-$("sSave").onclick=async()=>{const r=await api("/api/settings",{settings:{cli_exe:$("sCli").value.trim(),gap_sec:Number($("sGap").value)||0,advance_margin:Number($("sMargin").value)||0,default_inst:sInst,stop_before_play:$("sStop").checked,auto_sync:$("sAuto").checked}});
+$("sSave").onclick=async()=>{const r=await api("/api/settings",{settings:{update_url:$("sUpdUrl").value.trim(),update_check:$("sUpdChk").checked,cli_exe:$("sCli").value.trim(),gap_sec:Number($("sGap").value)||0,advance_margin:Number($("sMargin").value)||0,default_inst:sInst,stop_before_play:$("sStop").checked,auto_sync:$("sAuto").checked}});
   if(!r.ok){$("sCliHint").textContent="저장 실패: "+(r.message||r.error||"");return;}S.settings=r.settings;$("sCliHint").textContent=cliHint(r.cli);$("set").close();await refreshState();$("instDd")._refresh&&$("instDd")._refresh();renderMid();};
+/* ── 자동 업데이트 (경량판) ── */
+let updInfo=null;
+async function checkUpdate(quiet){const r=await api("/api/update/check");if(!r.ok){if(!quiet)toast(r.message||"업데이트 확인 실패");return r;}
+  if(r.available){updInfo=r;$("updText").textContent=`새 버전 ${r.latest} 이(가) 있습니다 (현재 ${r.current})${r.lite?"":" — 경량판에서만 자동 적용됩니다"}${r.notes?" · "+r.notes:""}`;$("updGo").hidden=!r.lite;$("updBar").hidden=false;}
+  else if(!quiet)toast(`최신 버전입니다 (${r.current})`);return r;}
+$("updLater").onclick=()=>{$("updBar").hidden=true;};
+$("updGo").onclick=async()=>{if(!updInfo)return;$("updGo").disabled=true;$("updText").textContent="다운로드·검증 중…";const r=await api("/api/update/apply",{url:updInfo.url,sha256:updInfo.sha256,latest:updInfo.latest});
+  if(r.ok&&r.port){$("updText").textContent=r.message+" 새 버전이 뜨면 자동으로 이동합니다…";$("updLater").hidden=true;const origin=`http://127.0.0.1:${r.port}`;
+    for(let i=0;i<60;i++){await new Promise((res)=>setTimeout(res,500));try{await fetch(origin+"/api/health",{mode:"no-cors",cache:"no-store"});location.href=origin+"/";return;}catch{}}
+    $("updText").textContent="새 버전이 응답하지 않습니다. 앱을 직접 다시 실행해 주세요.";}
+  else if(r.ok){$("updText").textContent=r.message;$("updLater").hidden=true;}else{$("updGo").disabled=false;$("updText").textContent="업데이트 실패: "+(r.message||r.error||"");}};
+$("sUpdNow").onclick=async()=>{const r=await api("/api/settings",{settings:{update_url:$("sUpdUrl").value.trim()}});if(!r.ok){toast(r.message||r.error);return;}await checkUpdate(false);};
 $("sTest").onclick=async()=>{$("sCliHint").textContent="확인 중…";const d=await api("/api/cli_test",{cli_exe:$("sCli").value.trim()});$("sCliHint").textContent=d.ok?cliHint(d.cli):"확인 실패: "+(d.message||d.error||"");};
 
 /* ── 시작 ── */
 (async()=>{ddMake($("instDd"),instItems,()=>S.instrument,(v)=>{S.instrument=v;});const st=await refreshState();await loadAll();await loadLog();
   if(S.settings.auto_sync&&S.cliOk){$("btnSync").click();}
+  if(S.settings.update_check&&S.settings.update_url){setTimeout(()=>checkUpdate(true),1500);}
   if(S.cliOk){const a=await api("/api/activity");const p=a&&a.ok&&a.body&&a.body.Performance;
     if(p&&p.IsPlaying){S.now={title:"",inst:p.InstrumentName||"",song:p.MusicTitle||"",artist:""};S.playing=true;S.startedAt=Date.now()-(p.ElapsedSeconds||0)*1000;S.gen=(S.gen||0)+1;
       $("nowTitle").textContent=p.MusicTitle||"게임에서 재생 중";$("nowSub").textContent="게임에서 재생 중 · "+(p.InstrumentName||"");setMain(true);startPoll();}}

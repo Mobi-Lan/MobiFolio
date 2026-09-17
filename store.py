@@ -215,6 +215,8 @@ DEFAULT_SETTINGS = {
     "default_inst": "",       # 기본 악기 ("" = 악기 그대로)
     "auto_sync": True,        # 시작 시 CLI 연결돼 있으면 자동 갱신
     "stop_before_play": True, # 재생 전 현재 연주를 먼저 정지
+    "update_url": "",         # 경량판 자동 업데이트: latest.json 주소 (https). 비우면 확인하지 않는다
+    "update_check": True,     # 시작 시 업데이트 확인
 }
 _RANGES = {"gap_sec": (0, 60), "advance_margin": (0, 30)}
 

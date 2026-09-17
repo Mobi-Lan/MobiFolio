@@ -9,6 +9,8 @@ set "SRC=dist-electron\MobiFolio-win32-x64"
 if not exist "%SRC%\MobiFolio.exe" ( echo RUN build.cmd FIRST: %SRC% not found & goto :fail )
 for /f "tokens=2 delims=:, " %%V in ('findstr /c:"\"version\"" app\package.json') do set "VER=%%~V"
 set "OUT=release"
+rem Public base URL where release files are uploaded (edit this once). latest.json is written next to the lite exe.
+if not defined MF_UPDATE_BASE set "MF_UPDATE_BASE=https://example.invalid/mobifolio"
 if not exist "%OUT%" mkdir "%OUT%"
 rem 1) portable copy + zip
 if exist "%OUT%\MobiFolio-win32-x64" rmdir /s /q "%OUT%\MobiFolio-win32-x64"
@@ -23,6 +25,9 @@ cd app
 call npm run installer
 if errorlevel 1 ( cd .. & echo INSTALLER FAILED & goto :fail )
 cd ..
+rem 2b) latest.json for the lite auto-updater (version, url, sha256)
+powershell -NoProfile -Command "$h=(Get-FileHash '%OUT%\MobiFolioLite-%VER%.exe' -Algorithm SHA256).Hash.ToLower(); @{version='%VER%'; url='%MF_UPDATE_BASE%/MobiFolioLite-%VER%.exe'; sha256=$h; notes=''} | ConvertTo-Json -Compress | Set-Content -Encoding ascii '%OUT%\latest.json'"
+type "%OUT%\latest.json"
 rem 3) checksums
 powershell -NoProfile -Command "Get-ChildItem '%OUT%\*.exe','%OUT%\*.zip' | ForEach-Object { (Get-FileHash $_.FullName -Algorithm SHA256).Hash + '  ' + $_.Name } | Set-Content -Encoding ascii '%OUT%\SHA256SUMS.txt'"
 type "%OUT%\SHA256SUMS.txt"

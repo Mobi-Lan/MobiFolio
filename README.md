@@ -2,7 +2,7 @@
 
 > MobiFolio 는 비공식 팬 프로젝트로, NEXON·devCAT 과 무관하며 이들의 보증을 받지 않았습니다. 마비노기 모바일 및 관련 표장은 각 권리자의 상표입니다.
 
-마비노기 모바일 CLI(`MabinogiMobile_CLI.exe`)로 내 악기·악보를 받아 두고, 재생목록(폴더·검색·초성 색인)을 만들고, 고른 악보를 CLI 로 재생하는 로컬 도구. 인터넷·외부 서비스·LLM 없이 동작한다 (파이썬 표준 라이브러리 + 일렉트론 셸).
+마비노기 모바일 CLI(`MabinogiMobile_CLI.exe`)로 내 악기·악보를 받아 두고, 재생목록(폴더·검색·초성 색인)을 만들고, 고른 악보를 CLI 로 재생하는 로컬 도구. 외부 서비스·LLM 없이 동작하며, 인터넷은 (설정한 경우) 경량판의 업데이트 확인에만 쓴다 (파이썬 표준 라이브러리 + 일렉트론 셸 또는 Edge 앱 창).
 
 ## 실행
 - **배포판**: `build.cmd` 로 만든 `dist-electron\MobiFolio-win32-x64\MobiFolio.exe` (창 제목·바로가기는 「모비폴리오」; 폴더·실행파일명은 유니코드 정규화 문제를 피하려고 ASCII) (일렉트론 창 + 동봉된 파이썬 백엔드 `resources\MobiFolioCore.exe`). 창을 닫으면 백엔드에 정상 종료를 요청하고, 안 끝나면 강제 종료한다. 셸이 강제로 죽어도 백엔드는 부모 프로세스를 감시해 스스로 끝난다. **데이터·로그는 사용자 폴더 `%LOCALAPPDATA%\MobiFolio`** (`data/`, `fixtures/`, `mobifolio.log`(2MB 넘으면 새로 시작), `electron.log`) — 배포판·개발 실행이 같은 저장소를 쓰고, 재빌드·폴더 교체에 영향받지 않는다. 예전 위치(이전 이름 시절의 `%LOCALAPPDATA%\MabiScoreBox`, 앱 폴더·프로젝트 폴더의 `data/`)가 있으면 첫 실행 때 한 번 병합해 옮긴다 — 아티스트 지정·곡 길이·최근 재생·재생목록은 합집합, 설정·캐시는 최신본 (`data/migrated.json` 에 출처 기록). `MABI_DATA_DIR` 환경변수로 위치를 강제할 수 있다(테스트용).
@@ -45,6 +45,9 @@
 
 ## 경량판 (MobiFolioLite.exe, 약 9MB)
 Electron 없이 백엔드 exe 하나만 배포하는 판. 실행하면 스스로 빈 포트·토큰을 만들고 Windows 내장 Edge(없으면 Chrome, 둘 다 없으면 기본 브라우저 탭)를 전용 프로필의 **앱 창**(주소창 없음)으로 띄운다. 페이지는 서버에 연결(`/api/hold`)을 계속 열어 두고, 창을 닫거나 브라우저가 죽어 그 연결이 끊기면 4초 뒤 백엔드가 끝난다(새로고침은 바로 다시 붙어 살아남는다). 타이머가 아니라 연결이라 창을 최소화한 채 오래 두어도 끊기지 않고, 브라우저를 90초 안에 못 띄우면 고아로 남지 않게 스스로 끝난다. 최소화 시 페이지 타이머 지연을 막는 옵션(백그라운드 스로틀링 해제)을 Edge 앱 창과 Electron 창 모두에 준다. 두 번 실행하면 떠 있는 서버에 창만 하나 더 연다(`%LOCALAPPDATA%\MobiFolio\lite.json`). 데이터·보안(포트·토큰·CSP·경로 검증)은 Electron 판과 같고, Electron 전용 하드닝(퓨즈·메뉴 제거·권한 차단)만 없다. 창 아이콘은 Edge 것이 쓰인다.
+
+## 자동 업데이트 (경량판)
+설정 → 「업데이트 확인 주소」에 `latest.json` 의 https 주소를 넣으면, 시작할 때(설정으로 끌 수 있음) 그 JSON 만 읽어 새 버전이 있으면 상단에 알림을 띄운다. 「지금 업데이트」를 누르면 새 exe 를 받아 SHA256 을 검증하고, 현재 exe 를 `.bak` 으로 바꾼 뒤 새 파일을 제자리에 두고 새 프로세스를 띄운다(창은 그대로, 페이지가 새 포트로 이동). 새 프로세스가 `.bak` 을 지운다. 앱이 보내는 정보는 없고, 통신은 이 두 요청뿐이다. `latest.json` 은 `release.cmd` 가 만든다 — 형식: `{"version":"0.1.1","url":"https://…/MobiFolioLite-0.1.1.exe","sha256":"…","notes":""}`. `release.cmd` 실행 전에 `set MF_UPDATE_BASE=https://<파일을 올린 주소>` 를 지정하면 url 이 그 주소로 채워진다. Cloudflare 등 정적 호스팅에 `MobiFolioLite-<버전>.exe` 와 `latest.json` 을 같은 폴더에 올리면 된다.
 
 ## 배포 (release.cmd)
 `build.cmd` 로 패키지를 만든 뒤 `release.cmd` 를 실행하면 `release/` 에 다음이 생긴다: `MobiFolio-win32-x64/`(무설치 사본), `MobiFolio-<버전>-portable.zip`, `MobiFolio-Setup-<버전>.exe`(NSIS 설치기: 사용자 폴더 설치, 관리자 권한 불필요, 시작 메뉴·바탕화면 바로가기 「모비폴리오」, 앱 제거 등록, 덮어쓰기 업그레이드), `SHA256SUMS.txt`. 설치기는 electron-builder 가 이미 패키징된 폴더를 그대로 감싸므로 퓨즈·아이콘·메타데이터가 빌드와 동일하다. 코드 서명이 없어 첫 실행 시 SmartScreen 경고가 뜬다(「추가 정보 → 실행」). 버전은 `app/package.json` 의 `version` 이 기준.

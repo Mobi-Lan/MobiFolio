@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import errno
 import secrets
+import urllib.request
 import hashlib
 import hmac
 import base64
@@ -57,7 +58,8 @@ store.migrate_legacy([os.path.join(os.environ["LOCALAPPDATA"], "MabiScoreBox") i
                       HERE if not FROZEN else None])
 
 # 경량판(LITE): 일렉트론 셸 없이 이 exe 를 바로 실행한 경우 — 스스로 빈 포트·토큰을 만들고 Edge/Chrome 앱 창을 띄운다
-LITE = FROZEN and not os.environ.get("MABI_PARENT_PID") and not os.environ.get("MABI_NO_BROWSER")
+LITE_REUSE = os.environ.get("MABI_LITE_REUSE") == "1"   # 자동 업데이트로 다시 뜬 경우: 창은 이미 있으니 새로 띄우지 않는다
+LITE = FROZEN and not os.environ.get("MABI_PARENT_PID") and (not os.environ.get("MABI_NO_BROWSER") or LITE_REUSE)
 
 
 def _free_port() -> int:
@@ -68,20 +70,37 @@ PORT = int(os.environ.get("MABI_PLAYLIST_PORT") or (_free_port() if LITE else 19
 TOKEN = os.environ.get("MABI_TOKEN", "") or (secrets.token_hex(24) if LITE else "")   # 셸(또는 경량판 스스로)이 실행마다 만드는 비밀 — 있으면 모든 API 가 이 값을 요구한다
 PARENT = os.environ.get("MABI_PARENT_PID", "")
 LITE_FILE = os.path.join(BASE, "lite.json")   # 경량판이 떠 있는 포트 (두 번째 실행이 창만 다시 열 때 씀)
-VERSION = "0.1.0"
+UPDATE_DIR = os.path.join(BASE, "update")     # 받은 새 exe 와 교체 스크립트
+MAX_UPDATE_BYTES = 200 * 1024 * 1024
+VERSION = "0.1.1"
 _srv = None   # ThreadingHTTPServer (종료용)
+
+
+def _say(msg: str) -> None:
+    print(f"[{time.strftime('%H:%M:%S')}] {msg}", flush=True)
 
 
 def _shutdown() -> None:
     time.sleep(0.2)
+    threading.Timer(3.0, lambda: os._exit(0)).start()   # 어떤 이유로든 3초 안에 못 끝나면 강제 종료 (멈춘 프로세스를 남기지 않게)
     if LITE:
         try:
-            os.remove(LITE_FILE)   # 서버를 멈추기 전에 먼저 지운다 (멈추는 중 예외가 나도 기록이 남지 않게)
-        except OSError:
+            with open(LITE_FILE, encoding="utf-8") as f:
+                mine = int(json.load(f).get("pid", 0)) == os.getpid()
+            if mine:
+                os.remove(LITE_FILE)   # 내 기록일 때만 지운다 (업데이트로 뜬 새 인스턴스의 기록은 남겨야 한다)
+        except (OSError, ValueError):
             pass
     try:
+        _say("shutdown: stopping server")
+        try:
+            import faulthandler
+            faulthandler.dump_traceback_later(2.0, exit=False, file=sys.stderr)   # 2초 넘게 걸리면 어디서 막혔는지 로그에 남긴다
+        except Exception:
+            pass
         if _srv:
             _srv.shutdown()
+        _say("shutdown: done")
     finally:
         os._exit(0)
 
@@ -411,6 +430,120 @@ def _activity() -> dict:
     return a.to_dict()
 
 
+# ── 자동 업데이트 (경량판) ──
+def _vtuple(v: str) -> tuple:
+    return tuple(int(x) for x in re.findall(r"\d+", str(v or ""))[:4]) or (0,)
+
+
+def _safe_url(u: str) -> bool:
+    """https 만 허용. 루프백 http 는 로컬 테스트용으로만 허용한다."""
+    u = (u or "").strip().lower()
+    return u.startswith("https://") or u.startswith("http://127.0.0.1")
+
+
+def update_check() -> dict:
+    """설정의 latest.json 을 읽어 새 버전이 있는지 본다. 보내는 것은 없다(사용자 정보 없음)."""
+    url = str(store.get_settings().get("update_url") or "").strip()
+    if not _safe_url(url):
+        return {"ok": False, "error": "no_url", "message": "업데이트 확인 주소(https)가 설정되지 않았습니다.", "current": VERSION}
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": f"MobiFolio/{VERSION}", "Cache-Control": "no-cache"})
+        with urllib.request.urlopen(req, timeout=8) as r:
+            data = json.loads(r.read(65536).decode("utf-8-sig"))
+    except Exception as e:
+        return {"ok": False, "error": "fetch_failed", "message": f"업데이트 정보를 받지 못했습니다: {type(e).__name__}", "current": VERSION}
+    if not isinstance(data, dict):
+        return {"ok": False, "error": "bad_manifest", "message": "latest.json 형식이 잘못되었습니다.", "current": VERSION}
+    latest = str(data.get("version") or "")
+    dl = str(data.get("url") or "")
+    sha = str(data.get("sha256") or "").lower()
+    ok_manifest = bool(latest) and _safe_url(dl) and re.fullmatch(r"[0-9a-f]{64}", sha or "") is not None
+    return {"ok": True, "current": VERSION, "latest": latest, "available": ok_manifest and _vtuple(latest) > _vtuple(VERSION),
+            "url": dl, "sha256": sha, "notes": str(data.get("notes") or "")[:2000], "lite": LITE, "manifest_ok": ok_manifest}
+
+
+def update_apply(info: dict) -> dict:
+    """새 exe 를 받아 SHA256 을 검증하고 제자리에 바꿔 넣은 뒤, 같은 포트·토큰으로 새 프로세스를 띄우고 자신은 끝난다 (경량판만).
+    Windows 는 실행 중인 exe 의 '이름 바꾸기'를 허용하므로 외부 스크립트 없이 된다: 현재 exe → .bak, 새 파일 → 현재 이름.
+    열려 있는 창의 페이지는 새 포트로 이동하므로 창이 닫혔다 열리지 않는다. .bak 은 새 프로세스가 지운다."""
+    if not LITE:
+        return {"ok": False, "error": "not_lite", "message": "자동 업데이트는 경량판(MobiFolioLite.exe)에서만 지원합니다."}
+    dl, sha, latest = str(info.get("url") or ""), str(info.get("sha256") or "").lower(), str(info.get("latest") or "")
+    if not _safe_url(dl) or not re.fullmatch(r"[0-9a-f]{64}", sha or ""):
+        return {"ok": False, "error": "bad_manifest", "message": "다운로드 주소나 SHA256 이 없습니다."}
+    os.makedirs(UPDATE_DIR, exist_ok=True)
+    part = os.path.join(UPDATE_DIR, "MobiFolioLite.download.part")
+    h = hashlib.sha256(); size = 0
+    try:
+        req = urllib.request.Request(dl, headers={"User-Agent": f"MobiFolio/{VERSION}"})
+        with urllib.request.urlopen(req, timeout=30) as r, open(part, "wb") as f:
+            while True:
+                chunk = r.read(1 << 16)
+                if not chunk:
+                    break
+                size += len(chunk)
+                if size > MAX_UPDATE_BYTES:
+                    raise ValueError("too large")
+                h.update(chunk); f.write(chunk)
+    except Exception as e:
+        try:
+            os.remove(part)
+        except OSError:
+            pass
+        return {"ok": False, "error": "download_failed", "message": f"다운로드 실패: {type(e).__name__}"}
+    if h.hexdigest() != sha:
+        os.remove(part)
+        return {"ok": False, "error": "sha_mismatch", "message": "받은 파일의 SHA256 이 latest.json 과 다릅니다. 적용하지 않았습니다."}
+    cur = sys.executable   # onefile: 부모(부트로더) exe 경로 = 실제 배포 파일
+    bak = cur + ".bak"
+    try:
+        try:
+            os.remove(bak)
+        except OSError:
+            pass
+        os.rename(cur, bak)          # 실행 중이어도 이름 바꾸기는 된다
+        try:
+            os.replace(part, cur)
+        except OSError:
+            os.rename(bak, cur); raise
+    except OSError as e:
+        return {"ok": False, "error": "replace_failed", "message": f"파일을 바꾸지 못했습니다: {e}"}
+    # 새 프로세스: 같은 포트를 물려주면 페이지가 그대로 이동할 수 있다 — 이 프로세스가 포트를 놓아야 하므로 새 포트를 준다
+    new_port = _free_port()
+    env = dict(os.environ, MABI_PLAYLIST_PORT=str(new_port), MABI_TOKEN=TOKEN, MABI_LITE_REUSE="1")
+    env.pop("MABI_NO_BROWSER", None)
+    _lite_release()   # 단일 인스턴스 뮤텍스·lite.json 을 먼저 놓는다
+    try:
+        import subprocess
+        # PyInstaller 부트로더는 자식을 Job 객체에 넣고 그 안의 프로세스가 다 끝날 때까지 기다린다 — 새 인스턴스는 Job 에서 떼어 띄운다
+        flags = 0x00000008 | 0x00000200 | 0x01000000   # DETACHED | NEW_PROCESS_GROUP | CREATE_BREAKAWAY_FROM_JOB
+        try:
+            subprocess.Popen([cur], cwd=os.path.dirname(cur), env=env, close_fds=True, creationflags=flags)
+        except OSError:
+            subprocess.Popen([cur], cwd=os.path.dirname(cur), env=env, close_fds=True, creationflags=flags & ~0x01000000)
+    except OSError as e:
+        return {"ok": False, "error": "spawn_failed", "message": f"새 버전을 실행하지 못했습니다: {e}"}
+    _say(f"update: {VERSION} -> {latest}, new instance on port {new_port}")
+    threading.Timer(2.0, _shutdown).start()
+    return {"ok": True, "message": f"{latest} 로 업데이트합니다.", "restart": True, "port": new_port}
+
+
+def _cleanup_bak() -> None:
+    """업데이트로 남은 <exe>.bak 을 지운다 (이전 프로세스가 아직 잡고 있으면 잠시 뒤 다시)."""
+    bak = sys.executable + ".bak"
+    if not FROZEN or not os.path.exists(bak):
+        return
+    def go():
+        err = None
+        for _ in range(60):
+            try:
+                os.remove(bak); _say("update: removed old .bak"); return
+            except OSError as e:
+                err = e; time.sleep(1.0)
+        _say(f"update: could not remove .bak after 60s: {err}")
+    threading.Thread(target=go, daemon=True).start()
+
+
 def _mark_equipped(name: str) -> None:
     """change_instrument 성공 후 instruments 캐시의 IsEquipped 를 앱이 아는 대로 맞춘다 (fetched_at 은 유지)."""
     try:
@@ -522,7 +655,7 @@ class H(SimpleHTTPRequestHandler):
         u = urlparse(self.path)
         q = {k: v[0] for k, v in parse_qs(u.query).items()}
         if u.path == "/api/health":   # 일렉트론 셸이 "이 포트가 정말 모비폴리오인지" 확인하는 용도
-            return _json(self, {"app": "mobifolio", "version": VERSION, "pid": os.getpid(), "frozen": FROZEN,
+            return _json(self, {"app": "mobifolio", "version": VERSION, "pid": os.getpid(), "frozen": FROZEN, "lite": LITE,
                                 "parent": int(PARENT) if PARENT.isdigit() else None})
         if u.path == "/api/state":
             sc, ins = store.get_cache("scores"), store.get_cache("instruments")
@@ -591,6 +724,10 @@ class H(SimpleHTTPRequestHandler):
             if not self._guard():
                 return _json(self, {"ok": False, "error": "forbidden"}, 403)
             return _json(self, {"settings": store.get_settings(), "cli": _probe()})
+        if u.path == "/api/update/check":
+            if not self._guard():
+                return _json(self, {"ok": False, "error": "forbidden"}, 403)
+            return _json(self, update_check())
         if u.path.startswith("/api/cli/"):
             # 읽기 전용 명령 디버그 통로 (필드 모양 확인용). 실행 명령은 막고, 다른 사이트의 <img>/fetch 로는 못 부르게 출처 검사
             if not self._guard():
@@ -722,10 +859,15 @@ class H(SimpleHTTPRequestHandler):
                 finally:
                     cli.set_exe_override(old)
             return _json(self, {"ok": True, "cli": res})
+        if u.path == "/api/update/apply":
+            return _json(self, update_apply(p))
         if u.path == "/api/settings":
             patch = p.get("settings")
             if not isinstance(patch, dict):
                 return _json(self, {"ok": False, "error": "bad_request", "message": "settings 는 객체여야 합니다."}, 400)
+            uu = patch.get("update_url")
+            if isinstance(uu, str) and uu.strip() and not _safe_url(uu):
+                return _json(self, {"ok": False, "error": "bad_update_url", "message": "업데이트 주소는 https:// 로 시작해야 합니다."}, 400)
             exe = patch.get("cli_exe")
             if isinstance(exe, str) and exe.strip() and not cli.valid_cli_path(exe):
                 return _json(self, {"ok": False, "error": "bad_cli_exe", "message": "CLI 경로는 로컬 드라이브의 MabinogiMobile_CLI.exe 절대 경로여야 합니다."}, 400)
@@ -751,9 +893,11 @@ def _find_app_browser() -> str | None:
 
 def _launch_app_window(url: str):
     """Edge/Chrome 앱 창(주소창 없음, 전용 프로필)을 띄우고 프로세스 핸들을 돌려준다. 없으면 기본 브라우저 탭(None)."""
+    global _app_profile
     exe = _find_app_browser()
     if exe:
         profile = os.path.join(BASE, ".appwindow-profile")
+        _app_profile = profile
         args = [exe, f"--app={url}", "--window-size=1280,860", f"--user-data-dir={profile}",
                 "--no-first-run", "--no-default-browser-check", "--disable-extensions", "--disable-features=TranslateUI,msEdgeStartupBoost",
                 # 최소화·가림 상태에서도 페이지 타이머(재생 감시 1초 폴링)가 늦춰지지 않게
@@ -774,7 +918,11 @@ def _open_window() -> None:
         return
     url = f"http://127.0.0.1:{PORT}"
 
-    threading.Thread(target=lambda: _launch_app_window(url), daemon=True).start()
+    if LITE_REUSE:
+        global _app_profile
+        _app_profile = os.path.join(BASE, ".appwindow-profile")   # 창은 이미 떠 있고(페이지가 새 포트로 이동) 감시만 이어간다
+    else:
+        threading.Thread(target=lambda: _launch_app_window(url), daemon=True).start()
     if LITE:
         threading.Thread(target=_lite_watchdog, daemon=True).start()
 
@@ -788,22 +936,64 @@ _had_hold = False
 _last_hold_close = 0.0
 
 
+_app_profile = ""        # 앱 창을 띄운 브라우저의 전용 프로필 경로 ("" = 기본 브라우저 탭으로 열었음)
+
+
+def _app_window_alive() -> bool | None:
+    """전용 프로필로 띄운 Edge/Chrome 프로세스가 아직 있는가. 앱 창 모드가 아니면 None(판단 불가).
+    Edge 는 한동안 안 쓴 창을 절전(슬리핑 탭)시키며 연결을 끊을 수 있어, 연결 끊김만으로는 '창 닫힘'을 단정할 수 없다 (실측)."""
+    if not _app_profile:
+        return None
+    try:
+        import subprocess
+        ps = ("$k=[Environment]::GetEnvironmentVariable('MF_PROFILE'); (Get-CimInstance Win32_Process | Where-Object { "
+              "($_.Name -eq 'msedge.exe' -or $_.Name -eq 'chrome.exe') -and $_.CommandLine -like ('*'+$k+'*') } | Measure-Object).Count")
+        env = dict(os.environ, MF_PROFILE=_app_profile)
+        r = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", ps], capture_output=True, timeout=20,
+                           env=env, creationflags=0x08000000)
+        return int(r.stdout.decode("utf-8", "replace").strip() or "0") > 0
+    except Exception as e:
+        print(f"[lite] window check failed: {e}", flush=True)
+        return None
+
+
 def _lite_watchdog() -> None:
-    """경량판 종료 판정 — 타이머가 아니라 '열린 연결'로 본다.
-    페이지는 /api/hold 연결을 계속 열어 두고, 창이 닫히거나 브라우저가 죽으면 그 연결이 끊긴다. 최소화해도 연결은 유지되므로
-    브라우저의 백그라운드 타이머 지연과 무관하다. 새로고침은 몇 초 안에 다시 연결되므로 4초의 여유를 둔다.
-    창이 90초 안에 한 번도 붙지 않으면(브라우저를 못 띄운 경우) 고아로 남지 않게 끝낸다."""
+    """경량판 종료 판정.
+    1) 페이지가 /api/hold 연결을 계속 열어 둔다 — 창이 닫히거나 브라우저가 죽으면 끊긴다 (타이머와 무관, 최소화해도 유지).
+    2) 연결이 끊겨도 바로 끝내지 않고, 전용 프로필의 브라우저 프로세스가 아직 있으면(절전된 창) 살아 있는 것으로 본다.
+       프로세스까지 없어졌을 때만 종료. 앱 창 모드가 아니면(기본 브라우저 탭) 연결이 60초 이상 없을 때 종료.
+    3) 창이 90초 안에 한 번도 붙지 않으면(브라우저를 못 띄운 경우) 고아로 남지 않게 끝낸다."""
+    last_check = 0.0
     while True:
         time.sleep(1.0)
         now = time.time()
         with _hold_lock:
             h, had, lc = _holds, _had_hold, _last_hold_close
-        if had and h == 0 and now - lc > 4.0:
-            print("[lite] window closed — exiting", flush=True); _shutdown()
-        if _bye_at and h == 0 and now - _bye_at > 4.0:
-            print("[lite] page said bye — exiting", flush=True); _shutdown()
+        gone_for = now - max(lc, _bye_at) if (had or _bye_at) else 0.0
+        if (had or _bye_at) and h == 0 and gone_for > 4.0 and now - last_check >= 5.0:
+            last_check = now
+            alive = _app_window_alive()
+            if alive is False:
+                _say("[lite] window closed — exiting"); _shutdown()
+            if alive is None and gone_for > 60.0:
+                _say("[lite] no window connection for 60s — exiting"); _shutdown()
         if not had and now - _start_at > 90.0:
-            print("[lite] no window attached in 90s — exiting", flush=True); _shutdown()
+            _say("[lite] no window attached in 90s — exiting"); _shutdown()
+
+
+_mutex = None
+
+
+def _lite_release() -> None:
+    """뮤텍스와 lite.json 을 놓는다 (업데이트로 새 프로세스에 자리를 넘길 때)."""
+    global _mutex
+    try:
+        if _mutex:
+            import ctypes
+            ctypes.windll.kernel32.CloseHandle(_mutex); _mutex = None
+        os.remove(LITE_FILE)
+    except OSError:
+        pass
 
 
 def _lite_single_instance() -> bool:
@@ -811,7 +1001,8 @@ def _lite_single_instance() -> bool:
     try:
         import ctypes
         k32 = ctypes.windll.kernel32
-        k32.CreateMutexW(None, False, "Local\\MobiFolioLite")
+        global _mutex
+        _mutex = k32.CreateMutexW(None, False, "Local\\MobiFolioLite")
         if k32.GetLastError() == 183:   # ERROR_ALREADY_EXISTS
             try:
                 with open(LITE_FILE, encoding="utf-8") as f:
@@ -878,7 +1069,8 @@ def main() -> None:
             return
         print(f"[mobifolio] port {PORT} bind failed: {e} (errno {e.errno}) — 예약 포트(Hyper-V/WinNAT)일 수 있습니다", flush=True)
         sys.exit(1)
-    print(f"[mobifolio] http://127.0.0.1:{PORT}  cli={cli.find_exe()}  frozen={FROZEN}", flush=True)
+    _say(f"[mobifolio] http://127.0.0.1:{PORT}  cli={cli.find_exe()}  frozen={FROZEN} lite={LITE} reuse={LITE_REUSE} pid={os.getpid()} v{VERSION}")
+    _cleanup_bak()
     _watch_parent()
     _open_browser()
     try:
