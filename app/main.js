@@ -9,9 +9,11 @@ const http = require("http");
 
 const PORT = 19997;
 const DEV = !app.isPackaged;
-// 앱 폴더 = 데이터 위치. 패키지면 악보함.exe 옆, 개발이면 프로젝트 루트
+// 앱 폴더: 패키지면 악보함.exe 옆, 개발이면 프로젝트 루트. 데이터·로그는 사용자 폴더 %LOCALAPPDATA%\MabiScoreBox (백엔드와 같은 규칙)
 const APP_DIR = DEV ? path.join(__dirname, "..") : path.dirname(process.execPath);
-const LOG = path.join(APP_DIR, "electron.log");
+const DATA_BASE = process.env.MABI_DATA_DIR || (process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, "MabiScoreBox") : APP_DIR);
+try { fs.mkdirSync(DATA_BASE, { recursive: true }); } catch {}
+const LOG = path.join(DATA_BASE, "electron.log");
 let backend = null;   // 우리가 띄운 백엔드 프로세스
 let win = null;
 
@@ -84,9 +86,10 @@ async function startBackend() {
       await waitPort(false, 10);
     }
   }
-  const env = { ...process.env, MABI_NO_BROWSER: "1", MABI_DATA_DIR: APP_DIR, MABI_PARENT_PID: String(process.pid), PYTHONUTF8: "1", PYTHONIOENCODING: "utf-8" };
+  // MABI_LEGACY_DIR: 예전 빌드가 앱 폴더 data/ 에 두던 데이터를 백엔드가 처음 한 번 사용자 폴더로 옮길 수 있게
+  const env = { ...process.env, MABI_NO_BROWSER: "1", MABI_LEGACY_DIR: APP_DIR, MABI_PARENT_PID: String(process.pid), PYTHONUTF8: "1", PYTHONIOENCODING: "utf-8" };
   const exe = backendExe();
-  const devOut = DEV ? fs.openSync(path.join(APP_DIR, "server-dev.log"), "a") : null;
+  const devOut = DEV ? fs.openSync(path.join(DATA_BASE, "server-dev.log"), "a") : null;
   const opts = { cwd: APP_DIR, env, windowsHide: true, stdio: devOut ? ["ignore", devOut, devOut] : "ignore" };
   try {
     backend = exe ? spawn(exe, [], opts) : spawn("python", [path.join(APP_DIR, "server.py")], opts);
@@ -95,7 +98,7 @@ async function startBackend() {
   backend.on("error", (e) => { log("[scorebox] backend spawn error", e); backend = null; fatal("백엔드 실행 실패", exe ? String(e) : "python 을 찾지 못했습니다. " + String(e)); });
   backend.on("exit", (code) => { log("[scorebox] backend exited", code); backend = null; });
   if (!(await waitPort(true, 60))) {   // 최대 12초
-    return fatal("백엔드 시작 실패", `12초 안에 백엔드가 준비되지 않았습니다.\n${APP_DIR}\\mabi-scorebox.log 를 확인하세요.`);
+    return fatal("백엔드 시작 실패", `12초 안에 백엔드가 준비되지 않았습니다.\n${DATA_BASE}\\mabi-scorebox.log 를 확인하세요.`);
   }
 }
 

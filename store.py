@@ -16,11 +16,118 @@ import threading
 import time
 import uuid
 
-# 데이터 위치: MABI_DATA_DIR(일렉트론이 앱 폴더를 넘김) > exe 옆(PyInstaller) > 이 파일 옆(소스 실행)
-_BASE = os.environ.get("MABI_DATA_DIR") or (os.path.dirname(sys.executable) if getattr(sys, "frozen", False) else os.path.dirname(os.path.abspath(__file__)))
+# 데이터 위치: MABI_DATA_DIR(개발·테스트용 강제) > 사용자 폴더 %LOCALAPPDATA%\MabiScoreBox (배포판·개발 실행이 같은 저장소를 쓴다)
+def user_base() -> str:
+    env = os.environ.get("MABI_DATA_DIR")
+    if env:
+        return env
+    la = os.environ.get("LOCALAPPDATA")
+    if la:
+        return os.path.join(la, "MabiScoreBox")
+    return os.path.dirname(sys.executable) if getattr(sys, "frozen", False) else os.path.dirname(os.path.abspath(__file__))
+
+
+_BASE = user_base()
 DATA_DIR = os.path.join(_BASE, "data")
 FIXTURE_DIR = os.path.join(_BASE, "fixtures")
 LOCK = threading.RLock()
+_DATA_FILES = ("scores.json", "instruments.json", "settings.json", "recent.json", "durations.json", "cli_log.json", "playlists.json", "artists.json")
+
+
+def _read_json_file(path: str):
+    try:
+        with open(path, encoding="utf-8-sig") as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+
+def _merge(name: str, docs: list) -> object:
+    """같은 파일의 여러 판본을 하나로. docs 는 (mtime, 내용) — 최신이 앞."""
+    docs = [d for _, d in sorted(docs, key=lambda x: -x[0])]
+    if not docs:
+        return None
+    if name == "artists.json":     # 아티스트·지정·잡음어 합집합 (같은 id 는 최신 우선, 별칭은 합침)
+        out = {"artists": [], "assign": {}, "noise": []}
+        seen: dict[str, dict] = {}
+        for d in docs:
+            if not isinstance(d, dict):
+                continue
+            for a in d.get("artists") or []:
+                if isinstance(a, dict) and isinstance(a.get("id"), str):
+                    if a["id"] in seen:
+                        seen[a["id"]]["aliases"] = list(dict.fromkeys(seen[a["id"]].get("aliases", []) + list(a.get("aliases") or [])))
+                    else:
+                        seen[a["id"]] = dict(a); out["artists"].append(seen[a["id"]])
+            for t, v in (d.get("assign") or {}).items():
+                out["assign"].setdefault(t, v)
+            for w in d.get("noise") or []:
+                if w not in out["noise"]:
+                    out["noise"].append(w)
+        return out
+    if name == "durations.json":   # 합집합 (최신 우선)
+        out = {}
+        for d in docs:
+            if isinstance(d, dict):
+                for k, v in d.items():
+                    out.setdefault(k, v)
+        return out
+    if name == "recent.json":      # 제목별 최신 ts
+        best: dict[str, dict] = {}
+        for d in docs:
+            for x in (d if isinstance(d, list) else []):
+                if isinstance(x, dict) and isinstance(x.get("title"), str):
+                    if x["title"] not in best or (x.get("ts") or 0) > (best[x["title"]].get("ts") or 0):
+                        best[x["title"]] = x
+        return sorted(best.values(), key=lambda x: -(x.get("ts") or 0))[:100]
+    if name == "playlists.json":   # 폴더·재생목록 id 합집합
+        out = {"folders": [], "playlists": []}
+        seen_f: set = set(); seen_p: set = set()
+        for d in docs:
+            if not isinstance(d, dict):
+                continue
+            for f in d.get("folders") or []:
+                if isinstance(f, dict) and f.get("id") not in seen_f:
+                    seen_f.add(f.get("id")); out["folders"].append(f)
+            for pl in d.get("playlists") or []:
+                if isinstance(pl, dict) and pl.get("id") not in seen_p:
+                    seen_p.add(pl.get("id")); out["playlists"].append(pl)
+        return out
+    return docs[0]                 # settings/scores/instruments/cli_log: 최신 판본
+
+
+def migrate_legacy(candidates: list) -> list:
+    """예전 위치(exe 옆 data/, 프로젝트 data/)의 파일을 한 번만 사용자 폴더로 옮긴다.
+    새 위치에 data/ 가 아직 없을 때만 실행. 두 저장소가 갈라져 있던 경우 파일 종류별로 병합한다."""
+    if os.environ.get("MABI_DATA_DIR") or os.path.isfile(_path("migrated.json")):
+        return []
+    # 새 위치에 '사용자 데이터'(설정·최근·길이·재생목록·아티스트)가 이미 있으면 건드리지 않는다. 캐시(scores/instruments/cli_log)만 있으면 이전 진행
+    if any(os.path.isfile(_path(n)) for n in ("settings.json", "recent.json", "durations.json", "playlists.json", "artists.json")):
+        return []
+    found: dict[str, list] = {}
+    srcs: list[str] = []
+    for base in candidates:
+        if not base:
+            continue
+        d = os.path.join(os.path.abspath(base), "data")
+        if os.path.abspath(d) == os.path.abspath(DATA_DIR) or not os.path.isdir(d):
+            continue
+        for name in _DATA_FILES:
+            src = os.path.join(d, name)
+            if os.path.isfile(src):
+                doc = _read_json_file(src)
+                if doc is not None:
+                    found.setdefault(name, []).append((os.path.getmtime(src), doc)); srcs.append(src)
+    if not found:
+        return []
+    os.makedirs(DATA_DIR, exist_ok=True)
+    for name, docs in found.items():
+        merged = _merge(name, docs)
+        if merged is not None:
+            save(name, merged)
+    save("migrated.json", {"at": time.time(), "from": srcs})
+    print(f"[store] 예전 데이터 {len(srcs)}개 파일을 병합해 {DATA_DIR} 로 옮겼습니다", flush=True)
+    return srcs
 
 
 def _path(name: str) -> str:

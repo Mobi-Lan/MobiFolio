@@ -20,7 +20,9 @@ from urllib.parse import parse_qs, urlparse
 
 FROZEN = bool(getattr(sys, "frozen", False))
 HERE = os.path.dirname(os.path.abspath(__file__))
-BASE = os.environ.get("MABI_DATA_DIR") or (os.path.dirname(sys.executable) if FROZEN else HERE)   # 데이터·로그 위치
+BASE = os.environ.get("MABI_DATA_DIR") or (os.path.join(os.environ["LOCALAPPDATA"], "MabiScoreBox") if os.environ.get("LOCALAPPDATA")
+                                           else (os.path.dirname(sys.executable) if FROZEN else HERE))   # 데이터·로그 위치 (store.user_base 와 같은 규칙)
+os.makedirs(BASE, exist_ok=True)
 RES = getattr(sys, "_MEIPASS", HERE)                               # 묶인 리소스(ui/) 위치
 if FROZEN:
     # --noconsole 이면 stdout 이 없다 → 로그를 exe 옆 파일로
@@ -41,6 +43,11 @@ sys.path.insert(0, HERE)
 import cli_transport as cli   # noqa: E402
 import library as lib         # noqa: E402
 import store                  # noqa: E402
+
+# 예전 위치(일렉트론이 넘긴 앱 폴더, exe 옆, 프로젝트 폴더)의 data/ 를 사용자 폴더로 한 번 옮긴다
+store.migrate_legacy([os.environ.get("MABI_LEGACY_DIR"), os.path.dirname(sys.executable) if FROZEN else None,
+                      os.path.dirname(os.path.dirname(sys.executable)) if FROZEN else None,   # 패키지: resources\.. = 앱 폴더
+                      HERE if not FROZEN else None])
 
 PORT = int(os.environ.get("MABI_PLAYLIST_PORT", "19997"))
 VERSION = "0.1.0"
