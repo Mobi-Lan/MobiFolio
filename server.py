@@ -615,7 +615,11 @@ class H(SimpleHTTPRequestHandler):
         if u.path == "/api/sync":
             return _json(self, sync())
         if u.path == "/api/play":
-            return _json(self, play(_s(p.get("title")), _s(p.get("instrument")) or None))
+            # 제목·악기 이름은 게임이 준 문자열 그대로 (끝에 공백이 있는 이름이 실제로 있다 — strip 하면 못 찾는다)
+            t, inst = p.get("title"), p.get("instrument")
+            t = t if isinstance(t, str) else _s(t)
+            inst = inst if isinstance(inst, str) and inst.strip() else None
+            return _json(self, play(t, inst))
         if u.path == "/api/stop":
             return _json(self, stop())
         if u.path == "/api/playlists":

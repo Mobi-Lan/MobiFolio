@@ -434,7 +434,7 @@ async function playIndex(i){if(S.switching)return;clearTimeout(S.gapT);S.gapT=nu
   S.failRun=0;setMain(true);startPoll();loadLog();renderMid();renderQueue();renderTree();}finally{S.switching=false;}}
 function setMain(playing){$("mainIcon").innerHTML=`<use href="#ic-${playing?"stop":"play"}"/>`;$("nowBadge").hidden=!playing;}
 const ERRK={not_found:"보관함에 없음",invalid_state:"게임이 준비되지 않음",cli_not_found:"CLI 없음",disconnected:"게임 연결 끊김",game_off:"게임 꺼짐",timeout:"응답 시간 초과",network:"서버 연결 실패",forbidden:"요청이 거부됨",empty_title:"제목 없음",internal:"서버 오류"};
-const errText=(e,m)=>((ERRK[e]||e||"")+(m?" · "+m:"")).trim();
+const errText=(e,m)=>(m&&/[가-힣]/.test(m)?m:((ERRK[e]||e||"")+(m?" · "+m:""))).trim();   // 서버가 한국어 설명을 주면 그것만
 function startPoll(){clearInterval(S.pollT);S.pollT=setInterval(pollAct,1000);}
 async function advance(dir){ // dir=+1 다음, -1 이전, 0 자동(다음)
   if(S.advancing||S.switching)return;S.advancing=true;clearTimeout(S.gapT);S.gapT=null;
