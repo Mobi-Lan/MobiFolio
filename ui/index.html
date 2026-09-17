@@ -269,19 +269,31 @@ function renderMid(){
       <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
         <span class="chip ${S.filter==="artist"?"on":""}" data-fl="artist">인식됨 <span class="num">${s.count-s.other}</span></span><span class="chip ${S.filter==="other"?"on":""}" data-fl="other">기타 <span class="num">${s.other}</span></span><span class="chip ${S.filter==="dup"?"on":""}" data-fl="dup">동명만</span><span class="chip ${S.filter==="manual"?"on":""}" data-fl="manual">수동 지정</span>
         <span style="width:1px;height:14px;background:var(--line);margin:0 2px"></span>
-        <span class="idx">${[...INDEX].map((c)=>`<span class="${S.initial===c?"on":""} ${s.byInitial&&s.byInitial[c]?"":"zero"}" data-i="${c}">${c}</span>`).join("")}</span></div></div>`;
+        <span class="idx">${[...INDEX].map((c)=>`<span class="${S.initial===c?"on":""} ${s.byInitial&&s.byInitial[c]?"":"zero"}" data-i="${c}">${c}</span>`).join("")}</span></div></div>`+bulkHtml(items);
   $("midHead").querySelectorAll("[data-s]").forEach((n)=>n.onclick=()=>{S.sort=n.dataset.s;renderMid();});
   $("midHead").querySelectorAll("[data-fl]").forEach((n)=>n.onclick=()=>{S.filter=S.filter===n.dataset.fl?"":n.dataset.fl;renderMid();});
   $("midHead").querySelectorAll("[data-i]").forEach((n)=>n.onclick=()=>{if(n.classList.contains("zero")&&S.initial!==n.dataset.i)return;S.initial=S.initial===n.dataset.i?"":n.dataset.i;renderMid();});
   const q=$("q");q.oninput=()=>{S.q=q.value;clearTimeout(S._qt);S._qt=setTimeout(()=>{const pos=q.selectionStart;renderMid();const n=$("q");n.focus();n.setSelectionRange(pos,pos);},120);};
   if($("qClear"))$("qClear").onclick=()=>{S.q="";renderMid();};if($("btnBack"))$("btnBack").onclick=()=>setView({kind:"lib"});if($("btnArtMenu"))$("btnArtMenu").onclick=(e)=>artistMenu(e,v.key);
-  const bulk=S.selected.size?`<div class="bulk"><input type="checkbox" id="selAll" checked><span>선택 ${S.selected.size}곡</span><span class="grow"></span><button class="small" id="bAssign">아티스트 지정</button><button class="small ghost" id="bUnassign">지정 해제</button><button class="small ghost" id="bAdd">목록에</button><button class="small ghost" id="bClear">${ICON("x","s")}</button></div>`:"";
-  $("mid").innerHTML=bulk+`<div class="row hd"><input type="checkbox" id="ckAll" ${S.selected.size&&S.selected.size===items.length?"checked":""}><span>#</span><span>제목 · 파일명</span><span>아티스트</span><span style="text-align:right">길이</span><span></span></div>`+
+  const st=$("mid").scrollTop;
+  $("mid").innerHTML=`<div class="row hd"><input type="checkbox" id="ckAll" ${S.selected.size&&S.selected.size===items.length?"checked":""}><span>#</span><span>제목 · 파일명</span><span>아티스트</span><span style="text-align:right">길이</span><span></span></div>`+
     (items.length?items.map((it,i)=>rowHtml(it,i)).join(""):`<div class="empty">${S.summary.count?"조건에 맞는 곡이 없습니다":"아직 수신한 악보가 없습니다 — 「갱신」을 누르세요"}</div>`);
-  bindRows(items);
+  $("mid").scrollTop=st;
+  bindRows(items);bindBulk(items);
+  $("ckAll").onchange=()=>{S.selected=new Set($("ckAll").checked?items.map((i)=>i.title):[]);renderMid();};
+}
+// 체크한 곡에 대한 일괄 작업 — 스크롤되지 않는 상단(midHead)에 고정
+function bulkHtml(items){const n=S.selected.size;if(!n)return "";const inPl=S.view.kind==="pl";
+  return `<div class="bulk" style="margin:8px 12px 0"><input type="checkbox" id="selAll" checked><span>선택 <b>${n}</b>곡</span><span class="grow"></span>
+    <button class="small pri" id="bPlay">${ICON("play","s")}선택 재생</button><button class="small" id="bAdd">${ICON("plus","s")}재생목록에 담기</button><button class="small ghost" id="bNew">새 목록으로</button>
+    ${inPl?`<button class="small ghost" id="bRemove">이 목록에서 제거</button>`:`<button class="small ghost" id="bAssign">${ICON("user","s")}아티스트 지정</button><button class="small ghost" id="bUnassign">지정 해제</button>`}
+    <button class="small ghost" id="bClear" title="선택 해제">${ICON("x","s")}</button></div>`;}
+function bindBulk(items){const sel=()=>items.filter((i)=>S.selected.has(i.title));
+  if($("selAll"))$("selAll").onchange=()=>{S.selected.clear();renderMid();};if($("bClear"))$("bClear").onclick=()=>{S.selected.clear();renderMid();};
+  if($("bPlay"))$("bPlay").onclick=()=>{const list=sel().map((it)=>({title:it.title,inst:it.plInst||""}));if(list.length)playFrom(list,0,"view");};
+  if($("bAdd"))$("bAdd").onclick=(e)=>addMenu(e,[...S.selected]);if($("bNew"))$("bNew").onclick=()=>newList(null,[...S.selected]);
   if($("bAssign"))$("bAssign").onclick=(e)=>assignMenu(e,[...S.selected]);if($("bUnassign"))$("bUnassign").onclick=async()=>{await api("/api/artists",{op:"unassign",titles:[...S.selected]});S.selected.clear();await loadAll();};
-  if($("bAdd"))$("bAdd").onclick=(e)=>addMenu(e,[...S.selected]);if($("bClear"))$("bClear").onclick=()=>{S.selected.clear();renderMid();};
-  $("ckAll").onchange=()=>{S.selected=new Set($("ckAll").checked?items.map((i)=>i.title):[]);renderMid();};if($("selAll"))$("selAll").onchange=()=>{S.selected.clear();renderMid();};
+  if($("bRemove"))$("bRemove").onclick=async()=>{S.lists=await api("/api/playlists",{op:"remove",id:S.view.id,titles:[...S.selected]});S.selected.clear();render();};
 }
 function rowHtml(it,i){const playing=S.now&&S.now.title===it.title&&S.playing;const inPl=S.view.kind==="artist";
   return `<div class="row ${S.sel===it.title?"sel":""}" data-t="${esc(it.title)}"><input type="checkbox" data-ck="${esc(it.title)}" ${S.selected.has(it.title)?"checked":""}><span class="no">${i+1}</span>
@@ -318,6 +330,7 @@ function renderPlHead(pl,items){
   const sortPl=async(key)=>{const sorted=[...items].sort((a,b)=>(a[key]||"힣").localeCompare(b[key]||"힣","ko"));S.lists=await api("/api/playlists",{op:"reorder",id:pl.id,items:sorted.map((i)=>i.title)});render();};
   $("plSortT").onclick=()=>sortPl("song");$("plSortA").onclick=()=>sortPl("artist");
   $("plExport").onclick=async()=>{const txt=JSON.stringify({name:pl.name,memo:pl.memo,items:pl.items},null,1);try{await navigator.clipboard.writeText(txt);alert("클립보드에 JSON 으로 복사했습니다");}catch{prompt("복사:",txt);}};
+  $("midHead").insertAdjacentHTML("beforeend",bulkHtml(items));
 }
 function renderPlRows(pl,items){
   $("mid").innerHTML=`<div class="row pl hd"><span></span><input type="checkbox" id="ckAll" ${S.selected.size&&S.selected.size===items.length?"checked":""}><span>#</span><span>제목 · 파일명</span><span>아티스트</span><span>악기</span><span style="text-align:right">길이</span><span></span></div>`+
@@ -326,7 +339,7 @@ function renderPlRows(pl,items){
       <span class="art">${esc(it.artist||"")}</span><div class="dd" data-inst-of="${esc(it.title)}"></div><span class="len">${it.duration?fmtSec(it.duration):""}</span>
       <span class="acts"><button class="ic pri" data-play="${esc(it.title)}">${ICON("play","s")}</button><button class="ic dim" data-more="${esc(it.title)}">${ICON("more","s")}</button><button class="ic dim" data-rm="${esc(it.title)}">${ICON("x","s")}</button></span></div>`;}).join(""):`<div class="empty">비어 있음 — 전체 악보에서 + 로 담으세요</div>`)+
     `<div class="note" style="padding:8px 10px">핸들을 끌어 순서 변경 · 악기는 곡마다 다르게 지정할 수 있습니다.</div>`;
-  bindRows(items);
+  bindRows(items);bindBulk(items);
   $("mid").querySelectorAll("[data-rm]").forEach((b)=>b.onclick=async()=>{S.lists=await api("/api/playlists",{op:"remove",id:pl.id,titles:[b.dataset.rm]});render();});
   $("mid").querySelectorAll("[data-inst-of]").forEach((el)=>{const t=el.dataset.instOf;ddMake(el,()=>[{v:"",label:"그대로"}].concat(S.instruments.map((i,k)=>({v:i.name,label:i.name,eq:i.equipped,sep:k===0}))),()=>(pl.items.find((x)=>x.title===t)||{}).inst||"",async(v)=>{S.lists=await api("/api/playlists",{op:"set_inst",id:pl.id,title:t,inst:v});});el.querySelector(".dd-btn").style.padding="4px 8px";el.querySelector(".dd-btn").style.fontSize="12px";});
   $("ckAll").onchange=()=>{S.selected=new Set($("ckAll").checked?items.map((i)=>i.title):[]);renderMid();};
