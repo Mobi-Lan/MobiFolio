@@ -510,7 +510,9 @@ def update_apply(info: dict) -> dict:
         return {"ok": False, "error": "replace_failed", "message": f"파일을 바꾸지 못했습니다: {e}"}
     # 새 프로세스: 같은 포트를 물려주면 페이지가 그대로 이동할 수 있다 — 이 프로세스가 포트를 놓아야 하므로 새 포트를 준다
     new_port = _free_port()
-    env = dict(os.environ, MABI_PLAYLIST_PORT=str(new_port), MABI_TOKEN=TOKEN, MABI_LITE_REUSE="1")
+    # 옛 부트로더(부모)는 자식이 끝난 뒤에도 남는 경우가 있어(실측), 새 인스턴스가 그 pid 를 넘겨받아 정리한다 (+ 옛 임시 폴더)
+    env = dict(os.environ, MABI_PLAYLIST_PORT=str(new_port), MABI_TOKEN=TOKEN, MABI_LITE_REUSE="1",
+               MABI_OLD_PID=str(os.getppid()), MABI_OLD_MEI=getattr(sys, "_MEIPASS", ""))
     env.pop("MABI_NO_BROWSER", None)
     _lite_release()   # 단일 인스턴스 뮤텍스·lite.json 을 먼저 놓는다
     try:
@@ -529,18 +531,36 @@ def update_apply(info: dict) -> dict:
 
 
 def _cleanup_bak() -> None:
-    """업데이트로 남은 <exe>.bak 을 지운다 (이전 프로세스가 아직 잡고 있으면 잠시 뒤 다시)."""
+    """업데이트 뒤처리: 옛 부트로더가 남아 있으면 끝내고(우리 프로세스), 옛 임시 폴더와 <exe>.bak 을 지운다."""
     bak = sys.executable + ".bak"
-    if not FROZEN or not os.path.exists(bak):
+    old_pid = os.environ.get("MABI_OLD_PID", "")
+    old_mei = os.environ.get("MABI_OLD_MEI", "")
+    if not FROZEN or not (os.path.exists(bak) or old_pid):
         return
     def go():
+        if old_pid.isdigit():
+            try:
+                import ctypes
+                k32 = ctypes.windll.kernel32
+                h = k32.OpenProcess(0x00100000 | 0x0001, False, int(old_pid))   # SYNCHRONIZE | TERMINATE
+                if h:
+                    if k32.WaitForSingleObject(h, 15000) != 0:   # 15초 안에 스스로 안 끝나면
+                        k32.TerminateProcess(h, 0); _say(f"update: old bootloader {old_pid} did not exit — terminated")
+                    k32.CloseHandle(h)
+            except Exception as e:
+                _say(f"update: old process check failed: {e}")
+        if old_mei and os.path.isdir(old_mei) and os.path.basename(old_mei).startswith("_MEI"):
+            import shutil
+            shutil.rmtree(old_mei, ignore_errors=True)
         err = None
-        for _ in range(60):
+        for _ in range(30):
+            if not os.path.exists(bak):
+                return
             try:
                 os.remove(bak); _say("update: removed old .bak"); return
             except OSError as e:
                 err = e; time.sleep(1.0)
-        _say(f"update: could not remove .bak after 60s: {err}")
+        _say(f"update: could not remove .bak after 30s: {err}")
     threading.Thread(target=go, daemon=True).start()
 
 
