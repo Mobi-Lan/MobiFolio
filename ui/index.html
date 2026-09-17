@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>모비폴리오</title>
+<link rel="icon" type="image/svg+xml" href="MobiFolio.svg">
 <style>
 :root{--bg:#101114;--panel:#0d1117;--panel2:#0b0f14;--card:#141a22;--card2:#182130;--line:#26303d;--line2:#1c2430;--ink:#e9ecf1;--ink2:#c9d0da;--strong:#f4e7c8;--muted:#9aa3b2;--faint:#6f7a8a;--faint2:#4b5665;--gold:#e2b866;--gold2:#c9a962;--golddim:#a8833f;--goldline:#6b5426;--green:#5fc7a4;--pink:#e88aa6;--blue:#7aa2e8;--ok:#4ade80;--mono:ui-monospace,Consolas,monospace;color-scheme:dark}
 *{box-sizing:border-box}
@@ -27,7 +28,7 @@ input[type=checkbox]{width:14px;height:14px;accent-color:var(--gold);margin:0}
 svg.i{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
 svg.i.s{width:14px;height:14px;stroke-width:1.8}svg.i.l{width:20px;height:20px}
 .top{display:flex;align-items:center;gap:10px;padding:9px 16px;border-bottom:1px solid var(--line2);background:var(--panel)}
-.brand{display:flex;flex-direction:column;line-height:1.05;margin-right:6px}.brand small{font-size:9.5px;letter-spacing:.16em;color:var(--golddim)}.brand b{font-size:16px}
+.brand{display:flex;flex-direction:column;line-height:1.05;margin-right:6px;display:flex;align-items:center;gap:9px}.brand>span{display:flex;flex-direction:column}.brand .logo{width:30px;height:30px;border-radius:7px;flex-shrink:0}.brand small{font-size:9.5px;letter-spacing:.16em;color:var(--golddim)}.brand b{font-size:16px}
 .grow{flex:1}
 .status{font-size:12.5px;color:var(--muted);display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
 .dot{width:7px;height:7px;border-radius:50%;background:var(--faint);display:inline-block}.dot.on{background:var(--ok);box-shadow:0 0 7px var(--ok)}.dot.off{background:var(--pink)}
@@ -117,7 +118,7 @@ dialog{background:var(--card);color:var(--ink);border:1px solid var(--line);bord
 </defs></svg>
 
 <div class="top">
-  <div class="brand"><small>MABINOGI MOBILE FAN PROJECT</small><b>MobiFolio</b></div>
+  <div class="brand"><img src="MobiFolio.svg" alt="" class="logo"><span><small>MABINOGI MOBILE FAN PROJECT</small><b>MobiFolio</b></span></div>
   <span class="grow"></span>
   <span class="status"><span class="dot" id="cliDot"></span><span id="cliText">CLI 확인 중</span></span>
   <span class="status" id="fetched">—</span>
@@ -157,7 +158,7 @@ dialog{background:var(--card);color:var(--ink);border:1px solid var(--line);bord
   <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;min-width:0"><span style="font-size:12px;color:var(--muted)">악기</span><div class="dd" id="instDd" style="flex:1;max-width:230px"></div><button class="ghost small" id="btnQueue" title="다음 재생 목록 보기/숨기기"><svg class="i s"><use href="#ic-list"/></svg>다음 <span class="num" id="queueN" style="color:var(--gold)">0</span></button></div>
 </div>
 
-<dialog id="dlg"><form method="dialog" style="display:flex;flex-direction:column;gap:10px"><div id="dlgTitle" style="font-weight:600">이름</div><input id="dlgInput" style="width:100%"><div style="display:flex;justify-content:flex-end;gap:6px"><button type="button" onclick="document.getElementById('dlg').close('cancel')">취소</button><button class="pri" value="ok">확인</button></div></form></dialog>
+<dialog id="dlg"><form method="dialog" style="display:flex;flex-direction:column;gap:10px"><div id="dlgTitle" style="font-weight:600">이름</div><input id="dlgInput" style="width:100%"><div style="display:flex;justify-content:flex-end;gap:6px"><button type="button" id="dlgCancel">취소</button><button class="pri" value="ok">확인</button></div></form></dialog>
 <div id="toast" hidden></div>
 <dialog id="rep" style="width:min(760px,92vw)"><div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><b>정규화 보고</b><span class="note" id="repMeta"></span><span class="grow"></span><form method="dialog"><button value="ok">닫기</button></form></div><div class="raw" id="repBody" style="max-height:70vh"></div></dialog>
 <dialog id="set" style="width:min(560px,92vw)"><div style="display:flex;align-items:center;gap:8px;margin-bottom:14px"><b>설정</b><span class="grow"></span><form method="dialog"><button value="cancel">닫기</button></form></div>
@@ -177,7 +178,9 @@ dialog{background:var(--card);color:var(--ink);border:1px solid var(--line);bord
 
 <script>
 const $=(id)=>document.getElementById(id);
-const api=async(path,body)=>{try{const r=await fetch(path,{method:body?"POST":"GET",headers:{"Content-Type":"application/json","X-Requested-With":"mobifolio"},body:body?JSON.stringify(body):undefined});const j=await r.json();if(j&&typeof j==="object"&&!("ok"in j)&&r.ok)return j;if(!r.ok&&j&&typeof j==="object"&&!("ok"in j))j.ok=false;return j;}catch(e){return {ok:false,error:"network",message:String(e.message||e)};}};
+const TOKEN="__MOBIFOLIO_TOKEN__";   // 서버가 index.html 을 낼 때 실행 토큰으로 바꿔 넣는다 (배포판)
+$("dlgCancel").onclick=()=>$("dlg").close("cancel");
+const api=async(path,body)=>{try{const r=await fetch(path,{method:body?"POST":"GET",headers:{"Content-Type":"application/json","X-Requested-With":"mobifolio","X-MobiFolio-Token":TOKEN},body:body?JSON.stringify(body):undefined});const j=await r.json();if(j&&typeof j==="object"&&!("ok"in j)&&r.ok)return j;if(!r.ok&&j&&typeof j==="object"&&!("ok"in j))j.ok=false;return j;}catch(e){return {ok:false,error:"network",message:String(e.message||e)};}};
 function toast(msg,ms=5000){const t=$("toast");t.textContent=msg;t.hidden=false;clearTimeout(t._t);t._t=setTimeout(()=>{t.hidden=true;},ms);}
 window.addEventListener("unhandledrejection",(e)=>{toast("오류: "+(e.reason&&e.reason.message||e.reason||"알 수 없음"));});
 window.addEventListener("error",(e)=>{toast("오류: "+(e.message||"알 수 없음"));});

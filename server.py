@@ -7,9 +7,13 @@
 from __future__ import annotations
 
 import errno
+import hashlib
+import hmac
+import base64
 import io
 import json
 import re
+import socket
 import os
 import sys
 import time
@@ -20,7 +24,8 @@ from urllib.parse import parse_qs, urlparse
 
 FROZEN = bool(getattr(sys, "frozen", False))
 HERE = os.path.dirname(os.path.abspath(__file__))
-BASE = os.environ.get("MABI_DATA_DIR") or (os.path.join(os.environ["LOCALAPPDATA"], "MobiFolio") if os.environ.get("LOCALAPPDATA")
+_DEV_ENV_OK = (not FROZEN) or os.environ.get("MABI_DEV") == "1"   # 배포판은 개발용 환경변수(MABI_DATA_DIR·MABI_CLI_EXE)를 무시
+BASE = (os.environ.get("MABI_DATA_DIR") if _DEV_ENV_OK else None) or (os.path.join(os.environ["LOCALAPPDATA"], "MobiFolio") if os.environ.get("LOCALAPPDATA")
                                            else (os.path.dirname(sys.executable) if FROZEN else HERE))   # 데이터·로그 위치 (store.user_base 와 같은 규칙)
 os.makedirs(BASE, exist_ok=True)
 RES = getattr(sys, "_MEIPASS", HERE)                               # 묶인 리소스(ui/) 위치
@@ -51,6 +56,8 @@ store.migrate_legacy([os.path.join(os.environ["LOCALAPPDATA"], "MabiScoreBox") i
                       HERE if not FROZEN else None])
 
 PORT = int(os.environ.get("MABI_PLAYLIST_PORT", "19997"))
+TOKEN = os.environ.get("MABI_TOKEN", "")   # 셸이 실행마다 만들어 넘기는 비밀 — 있으면 모든 API 가 이 값을 요구한다
+PARENT = os.environ.get("MABI_PARENT_PID", "")
 VERSION = "0.1.0"
 _srv = None   # ThreadingHTTPServer (종료용)
 
@@ -188,7 +195,8 @@ def sync() -> dict:
             _note(r, f"{label} 0건 — 기존 캐시 유지")
             continue
         store.set_cache(kind, items)
-        store.save_fixture(command, r.body)
+        if not FROZEN:   # 원본 응답 사본(fixtures/)은 개발 실행에서만 — 배포판에 중복 사본을 남기지 않는다
+            store.save_fixture(command, r.body)
     return out
 
 
@@ -433,7 +441,8 @@ class H(SimpleHTTPRequestHandler):
         u = urlparse(self.path)
         q = {k: v[0] for k, v in parse_qs(u.query).items()}
         if u.path == "/api/health":   # 일렉트론 셸이 "이 포트가 정말 모비폴리오인지" 확인하는 용도
-            return _json(self, {"app": "mobifolio", "version": VERSION, "pid": os.getpid(), "data_dir": store.DATA_DIR, "frozen": FROZEN})
+            return _json(self, {"app": "mobifolio", "version": VERSION, "pid": os.getpid(), "data_dir": store.DATA_DIR, "frozen": FROZEN,
+                                "parent": int(PARENT) if PARENT.isdigit() else None})
         if u.path == "/api/state":
             sc, ins = store.get_cache("scores"), store.get_cache("instruments")
             return _json(self, {"cli": _probe(), "scores": {"fetched_at": sc["fetched_at"], "count": len(sc["items"])},
@@ -469,22 +478,61 @@ class H(SimpleHTTPRequestHandler):
         if u.path == "/api/playlists":
             return _json(self, store.get_lists())
         if u.path == "/api/activity":
+            if not self._guard():   # CLI 를 실행시키는 GET 이라 출처 검사
+                return _json(self, {"ok": False, "error": "forbidden"}, 403)
             return _json(self, _activity())
         if u.path == "/api/log":
             return _json(self, {"items": _log[:40]})
         if u.path == "/api/settings":
             return _json(self, {"settings": store.get_settings(), "cli": _probe()})
         if u.path.startswith("/api/cli/"):
-            # 읽기 전용 명령 디버그 통로 (필드 모양 확인용). 실행 명령은 막는다.
+            # 읽기 전용 명령 디버그 통로 (필드 모양 확인용). 실행 명령은 막고, 다른 사이트의 <img>/fetch 로는 못 부르게 출처 검사
+            if not self._guard():
+                return _json(self, {"ok": False, "error": "forbidden"}, 403)
             command = u.path[len("/api/cli/"):]
             if not (command in ("status", "capabilities") or command.startswith("get_")):   # 읽기 명령만 (화이트리스트)
                 return _json(self, {"ok": False, "error": "not_allowed"}, 403)
             return _json(self, _cli(command, q.get("body"), timeout=120).to_dict())
         if u.path.startswith("/api/"):
             return _json(self, {"ok": False, "error": "not_found"}, 404)
-        if u.path == "/":
-            self.path = "/index.html"
+        if u.path in ("/", "/index.html"):
+            return self._serve_index()
+        if u.path.endswith((".py", ".tmp", ".json", ".log")) or "/." in u.path:   # ui/ 아래에 없지만, 혹시 몰라 원천 차단
+            return _json(self, {"ok": False, "error": "not_found"}, 404)
         return super().do_GET()
+
+    def end_headers(self):
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header("Cache-Control", "no-store")
+        super().end_headers()
+
+    def _serve_index(self):
+        """index.html 에 실행 토큰을 심고, 인라인 스크립트 해시로 CSP 를 건다 (외부 스크립트·인라인 핸들러 전부 차단)."""
+        try:
+            with open(os.path.join(UI_DIR, "index.html"), "rb") as f:
+                html = f.read()
+        except OSError:
+            return _json(self, {"ok": False, "error": "ui_missing"}, 500)
+        html = html.replace(b"__MOBIFOLIO_TOKEN__", TOKEN.encode("ascii"))
+        hashes = []
+        pos = 0
+        while True:
+            a = html.find(b"<script>", pos)
+            if a < 0:
+                break
+            b = html.find(b"</script>", a)
+            hashes.append("'sha256-" + base64.b64encode(hashlib.sha256(html[a + 8:b]).digest()).decode("ascii") + "'")
+            pos = b + 9
+        csp = ("default-src 'self'; script-src " + (" ".join(hashes) or "'none'") +
+               "; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self'; "
+               "object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(html)))
+        self.send_header("Content-Security-Policy", csp)
+        self.end_headers()
+        self.wfile.write(html)
 
     def _guard(self) -> bool:
         """CSRF 방지: 브라우저의 다른 사이트가 보낸 폼/스크립트 요청을 거른다.
@@ -495,7 +543,11 @@ class H(SimpleHTTPRequestHandler):
             return False
         if origin and origin not in (f"http://127.0.0.1:{PORT}", f"http://localhost:{PORT}"):
             return False
-        return self.headers.get("X-Requested-With") == "mobifolio"
+        if self.headers.get("X-Requested-With") != "mobifolio":
+            return False
+        if TOKEN:   # 배포판: 실행마다 다른 토큰 — 페이지(index.html)와 셸만 안다
+            return hmac.compare_digest(self.headers.get("X-MobiFolio-Token") or "", TOKEN)
+        return True
 
     def do_POST(self):
         try:
@@ -536,8 +588,8 @@ class H(SimpleHTTPRequestHandler):
             return _json(self, r, 200 if r.get("ok") else 400)
         if u.path == "/api/cli_test":   # 설정 창 「연결 확인」: 저장하지 않고 그 경로로 status 만 호출
             exe = _s(p.get("cli_exe"))
-            if exe and not (os.path.isabs(exe) and exe.lower().endswith(".exe") and os.path.isfile(exe)):
-                return _json(self, {"ok": False, "error": "bad_cli_exe", "message": "존재하는 .exe 의 절대 경로가 아닙니다."})
+            if exe and not cli.valid_cli_path(exe):
+                return _json(self, {"ok": False, "error": "bad_cli_exe", "message": "로컬 드라이브의 MabinogiMobile_CLI.exe 절대 경로가 아닙니다."})
             with _cli_lock:
                 old = cli._override
                 try:
@@ -551,10 +603,8 @@ class H(SimpleHTTPRequestHandler):
             if not isinstance(patch, dict):
                 return _json(self, {"ok": False, "error": "bad_request", "message": "settings 는 객체여야 합니다."}, 400)
             exe = patch.get("cli_exe")
-            if isinstance(exe, str) and exe.strip():
-                e = exe.strip()
-                if not (os.path.isabs(e) and e.lower().endswith(".exe") and os.path.isfile(e)):
-                    return _json(self, {"ok": False, "error": "bad_cli_exe", "message": "CLI 경로는 존재하는 .exe 의 절대 경로여야 합니다."}, 400)
+            if isinstance(exe, str) and exe.strip() and not cli.valid_cli_path(exe):
+                return _json(self, {"ok": False, "error": "bad_cli_exe", "message": "CLI 경로는 로컬 드라이브의 MabinogiMobile_CLI.exe 절대 경로여야 합니다."}, 400)
             s = store.set_settings(patch)
             cli.set_exe_override(s.get("cli_exe"))
             return _json(self, {"ok": True, "settings": s, "cli": _probe()})
@@ -602,11 +652,21 @@ def _open_window() -> None:
 _open_browser = _open_window   # 이전 이름 호환
 
 
+class _Server(ThreadingHTTPServer):
+    allow_reuse_address = False   # 같은 사용자의 다른 프로세스가 포트를 가로채지 못하게 (SO_REUSEADDR 끔 + 배타 사용)
+    daemon_threads = True
+
+    def server_bind(self):
+        if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        super().server_bind()
+
+
 def main() -> None:
     global _srv
     os.makedirs(store.DATA_DIR, exist_ok=True)
     try:
-        srv = ThreadingHTTPServer(("127.0.0.1", PORT), H)
+        srv = _Server(("127.0.0.1", PORT), H)
         _srv = srv
     except OSError as e:
         if e.errno in (errno.EADDRINUSE, 10048):

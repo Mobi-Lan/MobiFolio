@@ -12,15 +12,15 @@ import base64
 import json
 import os
 import subprocess
+import sys
 import time
 from dataclasses import dataclass, field
 
 CREATE_NO_WINDOW = 0x08000000
 EXE_CANDIDATES = [
-    os.environ.get("MABI_CLI_EXE", ""),
+    os.environ.get("MABI_CLI_EXE", "") if not getattr(sys, "frozen", False) or os.environ.get("MABI_DEV") == "1" else "",   # 배포판은 개발용 환경변수 무시
     r"C:\Nexon\MabinogiMobile\MabinogiMobile_CLI.exe",
-    "MabinogiMobile_CLI",   # PATH 등록분 (셸 갱신 전이면 못 찾을 수 있다)
-]
+]   # PATH/현재 폴더 탐색(where)은 하지 않는다 — 앱 폴더나 PATH 에 심어 둔 가짜 exe 가 실행되지 않게. 다른 위치면 설정에서 지정
 LAST_RESPONSE = os.path.join(os.environ.get("LOCALAPPDATA", ""), "MabinogiMobileCLI", "last-response.json")
 CAPABILITIES_FILE = os.path.join(os.environ.get("LOCALAPPDATA", ""), "MabinogiMobileCLI", "CAPABILITIES.json")
 LOCAL_COMMANDS = {"status", "capabilities"}      # last-response.json 을 갱신하지 않는 명령 (폴백 생략)
@@ -28,30 +28,38 @@ EXIT_MEANING = {0: "ok", 2: "usage_error", 3: "canceled", 4: "unknown_command", 
 
 
 _override: str = ""   # 설정(data/settings.json)의 cli_exe — server 가 set_exe_override 로 넣는다
+_CLI_BASENAME = "mabinogimobile_cli.exe"
+
+
+def valid_cli_path(p) -> bool:
+    """설정·환경변수로 들어온 CLI 경로가 실행해도 되는 모양인지: 로컬 드라이브 절대 경로, UNC·\\\\?\\ 아님,
+    파일명이 MabinogiMobile_CLI.exe, 실제 파일. (설정에 아무 exe 나 넣어 실행시키는 것을 막는다)"""
+    if not isinstance(p, str):
+        return False
+    p = p.strip()
+    if len(p) < 4 or not (p[0].isascii() and p[0].isalpha() and p[1] == ":" and p[2] in "\\/"):
+        return False
+    if p.startswith("\\\\") or "\\?\\" in p or "\0" in p:
+        return False
+    if os.path.basename(p).lower() != _CLI_BASENAME:
+        return False
+    return os.path.isfile(p)
 
 
 def set_exe_override(path) -> None:
     global _override
-    _override = path.strip() if isinstance(path, str) else ""
+    _override = path.strip() if valid_cli_path(path) else ""
 
 
 def find_exe() -> str | None:
-    """존재하는 실행파일 경로. 설정 지정 > 기본 설치 경로 > PATH(where)."""
+    """존재하는 실행파일 경로. 설정 지정 > MABI_CLI_EXE > 기본 설치 경로."""
     if _override and os.path.exists(_override):
         return _override
     for c in EXE_CANDIDATES:
         if not c:
             continue
-        if os.path.isabs(c):
-            if os.path.exists(c):
-                return c
-            continue
-        try:
-            r = subprocess.run(["where", c], capture_output=True, stdin=subprocess.DEVNULL, timeout=5, creationflags=CREATE_NO_WINDOW)
-            if r.returncode == 0 and r.stdout.strip():
-                return _decode(r.stdout).splitlines()[0].strip()
-        except Exception:
-            pass
+        if c and valid_cli_path(c):
+            return c
     return None
 
 

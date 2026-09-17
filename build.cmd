@@ -9,13 +9,13 @@ set "NOPAUSE="
 if /i "%~1"=="--nopause" set "NOPAUSE=1"
 tasklist /fi "imagename eq MobiFolioCore.exe" 2>nul | find /i "MobiFolioCore.exe" >nul
 if not errorlevel 1 ( echo CLOSE THE APP FIRST: MobiFolioCore.exe is running & goto :fail )
-python -m pip install --quiet --disable-pip-version-check pyinstaller
-python -m PyInstaller --noconfirm --clean --onefile --noconsole --name MobiFolioCore --add-data "ui;ui" server.py
+python -m pip install --quiet --disable-pip-version-check "pyinstaller==6.22.3"
+python -m PyInstaller --noconfirm --clean --onefile --noconsole --name MobiFolioCore --add-data "ui;ui" --version-file version_info.txt --noupx server.py
 if errorlevel 1 ( echo BACKEND BUILD FAILED & goto :fail )
 copy /y dist\MobiFolioCore.exe MobiFolioCore.exe >nul
 if errorlevel 1 ( echo COPY FAILED: MobiFolioCore.exe is locked? & goto :fail )
 cd app
-if not exist node_modules ( call npm install --no-audit --no-fund )
+if not exist node_modules ( call npm ci --no-audit --no-fund )
 call npm run package
 if errorlevel 1 ( cd .. & echo ELECTRON PACKAGE FAILED & goto :fail )
 cd ..

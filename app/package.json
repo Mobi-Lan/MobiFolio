@@ -7,9 +7,10 @@
   "private": true,
   "scripts": {
     "start": "electron .",
-    "package": "electron-packager . MobiFolio --platform=win32 --arch=x64 --out=../dist-electron --overwrite --extra-resource=../MobiFolioCore.exe --ignore=node_modules/.cache"
+    "package": "electron-packager . MobiFolio --platform=win32 --arch=x64 --out=../dist-electron --overwrite --extra-resource=../MobiFolioCore.exe --ignore=node_modules/.cache --win32metadata.CompanyName=Mobi-Lan --win32metadata.ProductName=MobiFolio --win32metadata.FileDescription=\"MobiFolio - MABINOGI MOBILE FAN PROJECT\" --win32metadata.OriginalFilename=MobiFolio.exe --icon=icon/MobiFolio.ico && node fuse.js"
   },
   "devDependencies": {
+    "@electron/fuses": "^2.1.3",
     "@electron/packager": "^20.3.0",
     "electron": "^44.4.1"
   }

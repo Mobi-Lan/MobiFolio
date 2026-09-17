@@ -19,7 +19,7 @@ import uuid
 # 데이터 위치: MABI_DATA_DIR(개발·테스트용 강제) > 사용자 폴더 %LOCALAPPDATA%\MobiFolio (배포판·개발 실행이 같은 저장소를 쓴다)
 def user_base() -> str:
     env = os.environ.get("MABI_DATA_DIR")
-    if env:
+    if env and (not getattr(sys, "frozen", False) or os.environ.get("MABI_DEV") == "1"):   # 배포판은 개발용 환경변수 무시
         return env
     la = os.environ.get("LOCALAPPDATA")
     if la:
@@ -99,7 +99,7 @@ def _merge(name: str, docs: list) -> object:
 def migrate_legacy(candidates: list) -> list:
     """예전 위치(exe 옆 data/, 프로젝트 data/)의 파일을 한 번만 사용자 폴더로 옮긴다.
     새 위치에 data/ 가 아직 없을 때만 실행. 두 저장소가 갈라져 있던 경우 파일 종류별로 병합한다."""
-    if os.environ.get("MABI_DATA_DIR") or os.path.isfile(_path("migrated.json")):
+    if _BASE == os.environ.get("MABI_DATA_DIR") or os.path.isfile(_path("migrated.json")):   # 개발용 강제 위치면 이전하지 않는다
         return []
     # 새 위치에 '사용자 데이터'(설정·최근·길이·재생목록·아티스트)가 이미 있으면 건드리지 않는다. 캐시(scores/instruments/cli_log)만 있으면 이전 진행
     if any(os.path.isfile(_path(n)) for n in ("settings.json", "recent.json", "durations.json", "playlists.json", "artists.json")):
