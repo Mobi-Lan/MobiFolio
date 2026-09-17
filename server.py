@@ -16,15 +16,23 @@ from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
-sys.stdout.reconfigure(encoding="utf-8")
+FROZEN = bool(getattr(sys, "frozen", False))
 HERE = os.path.dirname(os.path.abspath(__file__))
+BASE = os.path.dirname(sys.executable) if FROZEN else HERE        # 데이터·로그 위치 (exe 옆)
+RES = getattr(sys, "_MEIPASS", HERE)                               # 묶인 리소스(ui/) 위치
+if FROZEN:
+    # --noconsole 이면 stdout 이 없다 → 로그를 exe 옆 파일로
+    _logf = open(os.path.join(BASE, "mabi-scorebox.log"), "a", encoding="utf-8", buffering=1)
+    sys.stdout = sys.stderr = _logf
+elif sys.stdout:
+    sys.stdout.reconfigure(encoding="utf-8")
 sys.path.insert(0, HERE)
 import cli_transport as cli   # noqa: E402
 import library as lib         # noqa: E402
 import store                  # noqa: E402
 
 PORT = int(os.environ.get("MABI_PLAYLIST_PORT", "19997"))
-UI_DIR = os.path.join(HERE, "ui")
+UI_DIR = os.path.join(RES, "ui")
 _cli_lock = threading.Lock()   # CLI 는 한 번에 하나만 (게임 파이프 직렬)
 
 
@@ -302,10 +310,24 @@ class H(SimpleHTTPRequestHandler):
         return _json(self, {"ok": False, "error": "not_found"}, 404)
 
 
+def _open_browser() -> None:
+    if os.environ.get("MABI_NO_BROWSER"):
+        return
+    import webbrowser
+    threading.Timer(0.8, lambda: webbrowser.open(f"http://127.0.0.1:{PORT}")).start()
+
+
 def main() -> None:
     os.makedirs(store.DATA_DIR, exist_ok=True)
-    srv = ThreadingHTTPServer(("127.0.0.1", PORT), H)
-    print(f"[mabi-playlist] http://127.0.0.1:{PORT}  cli={cli.find_exe()}", flush=True)
+    try:
+        srv = ThreadingHTTPServer(("127.0.0.1", PORT), H)
+    except OSError:
+        # 이미 떠 있음(포트 사용 중) → 창만 다시 연다
+        print(f"[mabi-playlist] port {PORT} busy — opening browser only", flush=True)
+        _open_browser(); time.sleep(1.5)
+        return
+    print(f"[mabi-playlist] http://127.0.0.1:{PORT}  cli={cli.find_exe()}  frozen={FROZEN}", flush=True)
+    _open_browser()
     try:
         srv.serve_forever()
     except KeyboardInterrupt:

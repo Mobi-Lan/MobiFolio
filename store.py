@@ -3,11 +3,14 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import time
 import uuid
 
-DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
-FIXTURE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures")
+# exe(PyInstaller onefile) 로 묶였을 땐 exe 옆에, 소스로 돌릴 땐 이 파일 옆에 data/ 를 둔다
+_BASE = os.path.dirname(sys.executable) if getattr(sys, "frozen", False) else os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.join(_BASE, "data")
+FIXTURE_DIR = os.path.join(_BASE, "fixtures")
 
 
 def _path(name: str) -> str:

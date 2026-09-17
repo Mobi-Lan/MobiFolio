@@ -2,3 +2,8 @@ data/
 fixtures/
 __pycache__/
 *.pyc
+build/
+dist/
+*.spec
+*.log
+MabiScoreBox.exe
