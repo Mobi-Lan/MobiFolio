@@ -170,11 +170,6 @@ dialog{background:var(--card);color:var(--ink);border:1px solid var(--line);bord
     <label>시작 시 자동 갱신</label><label style="color:var(--ink2);display:flex;gap:8px;align-items:center"><input type="checkbox" id="sAuto"> CLI 연결돼 있으면 악기·악보를 다시 받음</label>
   </div>
   <div style="display:flex;justify-content:flex-end;gap:6px;margin-top:14px"><button id="sTest" class="ghost">연결 확인</button><button id="sSave" class="pri">저장</button></div>
-  <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--line2)">
-    <div style="display:flex;align-items:center;gap:8px"><b>곡 길이 스캔</b><span class="note" id="scanMeta">—</span><span class="grow"></span><button class="ghost small" id="scanCancel" hidden>취소</button><button class="small" id="scanStart"><svg class="i s"><use href="#ic-clock"/></svg>스캔 시작</button></div>
-    <div class="track" style="margin:8px 0 6px;height:4px"><i id="scanProg" style="width:0%"></i></div>
-    <div class="note">CLI 에는 악보 길이를 주는 명령이 없어서, 길이를 모르는 곡을 하나씩 2~3초 틀어 길이를 읽고 바로 멈춥니다. 게임 안에서 실제로 연주되므로 조용한 곳에서 돌리세요. 날개는 소모되지 않습니다. 결과는 길이 캐시에 저장돼 목록·큐·합계에 바로 반영됩니다.</div>
-  </div>
 </dialog>
 
 <script>
@@ -459,13 +454,8 @@ $("btnSync").onclick=async()=>{$("btnSync").disabled=true;const r=await api("/ap
 $("btnReport").onclick=async()=>{const d=await api("/api/normalize");const s=d.summary;$("repMeta").textContent=`${s.count}곡 · 인식 ${s.count-s.other} · 기타 ${s.other}`;$("repBody").textContent=d.rows.map((r)=>`${r.bucket==="other"?"기타":"인식"} ${r.rule.padEnd(6)} | ${r.title}\n      → 아티스트 [${r.artist}] 곡 [${r.song}]${r.variant?` 변형 ${r.variant}`:""}${r.tags.length?` 태그 ${r.tags.join(",")}`:""}${r.removed.length?` 제거 ${r.removed.join(" ")}`:""}`).join("\n");$("rep").showModal();};
 let sInst="";
 $("btnSettings").onclick=async()=>{const d=await api("/api/settings");const s=d.settings;$("sCli").value=s.cli_exe||"";$("sGap").value=s.gap_sec;$("sMargin").value=s.advance_margin;$("sStop").checked=!!s.stop_before_play;$("sAuto").checked=!!s.auto_sync;sInst=s.default_inst||"";
-  ddMake($("sInstDd"),instItems,()=>sInst,(v)=>{sInst=v;});$("sCliHint").textContent=d.cli.found?`감지된 경로: ${d.cli.exe} · ${d.cli.pipe==="connected"?"연결됨":"끊김 "+(d.cli.reason||"")}`:"실행파일을 찾지 못했습니다";$("set").showModal();scanRefresh();};
+  ddMake($("sInstDd"),instItems,()=>sInst,(v)=>{sInst=v;});$("sCliHint").textContent=d.cli.found?`감지된 경로: ${d.cli.exe} · ${d.cli.pipe==="connected"?"연결됨":"끊김 "+(d.cli.reason||"")}`:"실행파일을 찾지 못했습니다";$("set").showModal();};
 $("sSave").onclick=async()=>{const r=await api("/api/settings",{settings:{cli_exe:$("sCli").value.trim(),gap_sec:Number($("sGap").value)||0,advance_margin:Number($("sMargin").value)||0,default_inst:sInst,stop_before_play:$("sStop").checked,auto_sync:$("sAuto").checked}});S.settings=r.settings;$("sCliHint").textContent=r.cli.found?`감지된 경로: ${r.cli.exe} · ${r.cli.pipe==="connected"?"연결됨":"끊김"}`:"실행파일을 찾지 못했습니다";$("set").close();await refreshState();renderMid();};
-async function scanRefresh(){const d=await api("/api/scan");const pct=d.total?Math.round(d.done/d.total*100):0;$("scanProg").style.width=(d.running?pct:0)+"%";
-  $("scanMeta").textContent=d.running?`${d.done}/${d.total} · 확인 ${d.found} · ${d.current?d.current.replace(/^악보:\s*/,""):""}`:`길이 모르는 곡 ${d.unknown}곡${d.finished?` · 마지막 스캔 확인 ${d.found}/${d.total}${d.errors&&d.errors.length?` · 실패 ${d.errors.length}`:""}`:""}`;
-  $("scanCancel").hidden=!d.running;$("scanStart").disabled=d.running||!d.unknown;if(d.running){clearTimeout(S._scanT);S._scanT=setTimeout(scanRefresh,1000);}else if(S._scanWas){S._scanWas=false;await loadAll();}S._scanWas=d.running;}
-$("scanStart").onclick=async()=>{if(!confirm("길이를 모르는 곡을 차례로 잠깐씩 연주합니다(곡당 2~3초). 시작할까요?"))return;const r=await api("/api/scan",{});if(!r.ok)alert(r.error||"시작 실패");scanRefresh();};
-$("scanCancel").onclick=async()=>{await api("/api/scan",{op:"cancel"});};
 $("sTest").onclick=async()=>{await api("/api/settings",{settings:{cli_exe:$("sCli").value.trim()}});const d=await api("/api/settings");$("sCliHint").textContent=d.cli.found?`감지된 경로: ${d.cli.exe} · ${d.cli.pipe==="connected"?"연결됨":"끊김 "+(d.cli.reason||"")}`:"실행파일을 찾지 못했습니다";await refreshState();};
 
 /* ── 시작 ── */

@@ -100,6 +100,15 @@ def set_duration(title: str, seconds: float) -> None:
         save("durations.json", d)
 
 
+# ── CLI 응답 로그 (재시작 후에도 보이게) ──
+def get_log() -> list:
+    return load("cli_log.json", [])
+
+
+def set_log(items: list) -> None:
+    save("cli_log.json", items[:60])
+
+
 # ── 재생목록·폴더 ──
 def _norm_item(x) -> dict:
     """항목 = {"title": DisplayTitle, "inst": 악기명|""}. 예전 문자열 항목도 받아준다."""
