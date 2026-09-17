@@ -550,7 +550,13 @@ class H(SimpleHTTPRequestHandler):
                 html = f.read()
         except OSError:
             return _json(self, {"ok": False, "error": "ui_missing"}, 500)
+        # 브라우저는 인라인 스크립트를 LF 로 정규화한 뒤 CSP 해시를 잰다 → CRLF 로 체크아웃된 파일이면
+        # 해시가 어긋나 스크립트가 통째로 차단된다(core.autocrlf=true 인 Windows 클론). 서빙 전에 맞춘다.
+        html = html.replace(b"\r\n", b"\n")
         html = html.replace(b"__MOBIFOLIO_TOKEN__", TOKEN.encode("ascii"))
+        q = {k: v[0] for k, v in parse_qs(urlparse(self.path).query).items()}
+        if q.get("theme") in ("light", "dark"):   # 스크린샷·검토용: 저장된 선택과 무관하게 이번 로드만 테마 고정
+            html = html.replace(b'<html lang="ko">', f'<html lang="ko" data-theme="{q["theme"]}">'.encode("ascii"), 1)
         hashes = []
         pos = 0
         while True:

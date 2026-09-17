@@ -522,11 +522,12 @@ $("btnNewList").onclick=()=>newList(null);$("btnNewFolder").onclick=()=>newFolde
 const THEME_KEY="mobifolio.theme",THEME_ORDER=["auto","dark","light"],THEME_LABEL={auto:"자동",dark:"다크",light:"라이트"};
 const sysDark=()=>window.matchMedia("(prefers-color-scheme: dark)").matches;
 function readTheme(){try{const t=localStorage.getItem(THEME_KEY);return t==="dark"||t==="light"?t:"auto";}catch{return "auto";}}
-function applyTheme(t){const root=document.documentElement;if(t==="auto")root.removeAttribute("data-theme");else root.setAttribute("data-theme",t);
+let themeForced=document.documentElement.getAttribute("data-theme")||"";   // 서버가 ?theme= 으로 고정한 값 (검토용) — 사용자가 버튼을 누르면 해제
+function applyTheme(t){const root=document.documentElement;if(t==="auto"){if(themeForced)root.setAttribute("data-theme",themeForced);else root.removeAttribute("data-theme");}else root.setAttribute("data-theme",t);
   try{if(t==="auto")localStorage.removeItem(THEME_KEY);else localStorage.setItem(THEME_KEY,t);}catch{}
   const b=$("themeBtn");b.textContent="테마: "+THEME_LABEL[t];b.title=t==="auto"?`OS 설정을 따릅니다 (지금 ${sysDark()?"다크":"라이트"}). 눌러서 고정하세요.`:`${THEME_LABEL[t]}로 고정했습니다. 눌러서 바꾸세요.`;}
 applyTheme(readTheme());
-$("themeBtn").onclick=()=>{const i=THEME_ORDER.indexOf(readTheme());applyTheme(THEME_ORDER[(i+1)%THEME_ORDER.length]);};
+$("themeBtn").onclick=()=>{themeForced="";const i=THEME_ORDER.indexOf(readTheme());applyTheme(THEME_ORDER[(i+1)%THEME_ORDER.length]);};
 window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change",()=>{if(readTheme()==="auto")applyTheme("auto");});
 
 /* ── 갱신·보고·설정 ── */
