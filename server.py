@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import io
 import json
+import re
 import os
 import sys
 import time
@@ -22,7 +23,13 @@ BASE = os.environ.get("MABI_DATA_DIR") or (os.path.dirname(sys.executable) if FR
 RES = getattr(sys, "_MEIPASS", HERE)                               # 묶인 리소스(ui/) 위치
 if FROZEN:
     # --noconsole 이면 stdout 이 없다 → 로그를 exe 옆 파일로
-    _logf = open(os.path.join(BASE, "mabi-scorebox.log"), "a", encoding="utf-8", buffering=1)
+    _logp = os.path.join(BASE, "mabi-scorebox.log")
+    try:
+        if os.path.getsize(_logp) > 2_000_000:   # 무한 성장 방지: 2MB 넘으면 새로 시작
+            os.remove(_logp)
+    except OSError:
+        pass
+    _logf = open(_logp, "a", encoding="utf-8", buffering=1)
     sys.stdout = sys.stderr = _logf
 elif sys.stdout:
     sys.stdout.reconfigure(encoding="utf-8")
@@ -32,21 +39,73 @@ import library as lib         # noqa: E402
 import store                  # noqa: E402
 
 PORT = int(os.environ.get("MABI_PLAYLIST_PORT", "19997"))
+VERSION = "0.1.0"
+_srv = None   # ThreadingHTTPServer (종료용)
+
+
+def _shutdown() -> None:
+    time.sleep(0.2)
+    try:
+        if _srv:
+            _srv.shutdown()
+    finally:
+        os._exit(0)
+
+
+def _watch_parent() -> None:
+    """MABI_PARENT_PID(일렉트론)가 죽으면 같이 끝난다 — 셸이 강제 종료돼도 고아 백엔드가 남지 않게."""
+    pid = os.environ.get("MABI_PARENT_PID")
+    if not pid or not pid.isdigit():
+        return
+    try:
+        import ctypes
+        k32 = ctypes.windll.kernel32
+        h = k32.OpenProcess(0x00100000, False, int(pid))   # SYNCHRONIZE
+        if not h:
+            return
+        def wait():
+            k32.WaitForSingleObject(h, 0xFFFFFFFF)
+            os._exit(0)
+        threading.Thread(target=wait, daemon=True).start()
+    except Exception:
+        pass
 UI_DIR = os.path.join(RES, "ui")
 _cli_lock = threading.Lock()   # CLI 는 한 번에 하나만 (게임 파이프 직렬)
 _log: list[dict] = store.get_log()   # 최근 CLI 응답 요약 (UI 「CLI 응답」) — data/cli_log.json 에 남겨 재시작 후에도 보인다
 _last_play: dict = {"title": "", "inst": ""}   # 길이 캐시 키(DisplayTitle)용
 
-cli.set_exe_override(store.get_settings().get("cli_exe"))
+cli.set_exe_override(str(store.get_settings().get("cli_exe") or ""))
+_log_lock = threading.Lock()
+_ok_hosts = {f"127.0.0.1:{PORT}", f"localhost:{PORT}", "127.0.0.1", "localhost"}
+MAX_BODY = 1_000_000
+_PFX = re.compile(r"^악보\s*[:：]\s*")
 
 
 def _note(r, summary: str = "") -> None:
-    """CLI 결과를 로그에 남긴다 (최근 40건)."""
-    _log.insert(0, {"ts": time.time(), "command": r.command, "ok": r.ok, "error": r.error, "message": r.message,
-                    "elapsed": round(r.elapsed, 3), "summary": summary,
-                    "raw": (json.dumps(r.body, ensure_ascii=False)[:1500] if r.body is not None else r.raw[:1500])})
-    del _log[60:]
-    store.set_log(_log)
+    """CLI 결과를 로그에 남긴다 (최근 60건, UI 는 40건). 여러 스레드가 동시에 불러도 안전하게."""
+    row = {"ts": time.time(), "command": r.command, "ok": r.ok, "error": r.error, "message": r.message,
+           "elapsed": round(r.elapsed, 3), "summary": summary,
+           "raw": (json.dumps(r.body, ensure_ascii=False)[:1500] if r.body is not None else r.raw[:1500])}
+    with _log_lock:
+        _log.insert(0, row)
+        del _log[60:]
+        snap = list(_log)
+    try:
+        store.set_log(snap)
+    except Exception as e:
+        print(f"[log] 저장 실패: {e}", flush=True)
+
+
+def _s(v, default: str = "") -> str:
+    """문자열 강제 (None/숫자/딕셔너리가 와도 .strip() 에서 죽지 않게)."""
+    return v.strip() if isinstance(v, str) else (str(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else default)
+
+
+def _titles(v) -> list[str]:
+    """titles 는 문자열 배열만 (문자열 하나를 글자 단위로 돌지 않게)."""
+    if isinstance(v, list):
+        return [x for x in v if isinstance(x, str) and x.strip()]
+    return []
 
 
 def _json(handler, obj, status=200):
@@ -60,16 +119,22 @@ def _json(handler, obj, status=200):
 
 
 def _read_json(handler) -> dict:
-    n = int(handler.headers.get("Content-Length") or 0)
+    try:
+        n = int(handler.headers.get("Content-Length") or 0)
+    except ValueError:
+        return {"_error": "bad_length"}
     if n <= 0:
         return {}
+    if n > MAX_BODY:
+        return {"_error": "too_large"}
     raw = handler.rfile.read(n)
     for enc in ("utf-8", "mbcs"):   # 브라우저는 utf-8. 콘솔 도구가 cp949 로 보내도 조용히 빈 값이 되지 않게
         try:
-            return json.loads(raw.decode(enc))
+            v = json.loads(raw.decode(enc))
+            return v if isinstance(v, dict) else {"_error": "not_object"}
         except Exception:
             continue
-    return {"_decode_error": True}
+    return {"_error": "decode_error"}
 
 
 def _cli(command, body=None, timeout=660.0):
@@ -94,8 +159,17 @@ def sync() -> dict:
         if not r.ok:
             out["ok"] = False
             continue
-        items = r.body if isinstance(r.body, list) else (r.body.get("items") if isinstance(r.body, dict) else [])
-        store.set_cache(kind, items or [])
+        items = r.body if isinstance(r.body, list) else (r.body.get("items") if isinstance(r.body, dict) else None)
+        if not isinstance(items, list):
+            out["ok"] = False
+            out["steps"][-1]["error"] = "bad_shape"
+            _note(r, f"{label} 응답 모양 이상 — 캐시 유지")
+            continue
+        if not items and store.get_cache(kind)["items"]:
+            out["steps"][-1]["error"] = "empty_result"
+            _note(r, f"{label} 0건 — 기존 캐시 유지")
+            continue
+        store.set_cache(kind, items)
         store.save_fixture(command, r.body)
     return out
 
@@ -105,13 +179,17 @@ def lists_op(op: str, p: dict) -> dict:
     d = store.get_lists()
     pls, fds = d["playlists"], d["folders"]
     now = time.time()
+    fids = {f["id"] for f in fds}
+    name = _s(p.get("name"))[:200]
+    folder = p.get("folder") if p.get("folder") in fids else None
     if op == "folder_create":
-        f = {"id": store.new_id(), "name": (p.get("name") or "새 폴더").strip(), "parent": p.get("parent") or None, "created": now}
+        parent = p.get("parent") if p.get("parent") in fids else None
+        f = {"id": store.new_id(), "name": name or "새 폴더", "parent": parent, "created": now}
         fds.append(f)
     elif op == "folder_rename":
         for f in fds:
-            if f["id"] == p.get("id"):
-                f["name"] = (p.get("name") or f["name"]).strip()
+            if f["id"] == p.get("id") and name:
+                f["name"] = name
     elif op == "folder_delete":
         fid = p.get("id")
         # 하위 폴더는 상위로, 재생목록은 폴더 없음으로
@@ -124,29 +202,29 @@ def lists_op(op: str, p: dict) -> dict:
             if pl.get("folder") == fid:
                 pl["folder"] = parent
     elif op == "create":
-        pl = {"id": store.new_id(), "name": (p.get("name") or "새 재생목록").strip(), "folder": p.get("folder") or None,
+        pl = {"id": store.new_id(), "name": name or "새 재생목록", "folder": folder,
               "items": [], "created": now, "updated": now}
         pls.append(pl)
     elif op == "rename":
         for pl in pls:
-            if pl["id"] == p.get("id"):
-                pl["name"] = (p.get("name") or pl["name"]).strip(); pl["updated"] = now
+            if pl["id"] == p.get("id") and name:
+                pl["name"] = name; pl["updated"] = now
     elif op == "move":
         for pl in pls:
             if pl["id"] == p.get("id"):
-                pl["folder"] = p.get("folder") or None; pl["updated"] = now
+                pl["folder"] = folder; pl["updated"] = now
     elif op == "delete":
         d["playlists"] = [pl for pl in pls if pl["id"] != p.get("id")]
     elif op == "add":
         for pl in pls:
             if pl["id"] == p.get("id"):
                 have = {it["title"] for it in pl["items"]}
-                for t in p.get("titles") or []:
-                    if t and t not in have:
+                for t in _titles(p.get("titles")):
+                    if t not in have:
                         pl["items"].append({"title": t, "inst": ""}); have.add(t)
                 pl["updated"] = now
     elif op == "remove":
-        rm = set(p.get("titles") or [])
+        rm = set(_titles(p.get("titles")))
         for pl in pls:
             if pl["id"] == p.get("id"):
                 pl["items"] = [it for it in pl["items"] if it["title"] not in rm]; pl["updated"] = now
@@ -154,20 +232,20 @@ def lists_op(op: str, p: dict) -> dict:
         for pl in pls:
             if pl["id"] == p.get("id"):
                 by = {it["title"]: it for it in pl["items"]}
-                order = [by[t] for t in (p.get("items") or []) if t in by]
+                order = [by[t] for t in _titles(p.get("items")) if t in by]
                 seen = {it["title"] for it in order}
                 pl["items"] = order + [it for it in pl["items"] if it["title"] not in seen]; pl["updated"] = now
     elif op == "set_inst":   # 곡별 악기. title 없으면 목록 전체
         for pl in pls:
             if pl["id"] == p.get("id"):
                 for it in pl["items"]:
-                    if not p.get("title") or it["title"] == p.get("title"):
-                        it["inst"] = p.get("inst") or ""
+                    if not _s(p.get("title")) or it["title"] == p.get("title"):
+                        it["inst"] = _s(p.get("inst"))
                 pl["updated"] = now
     elif op == "memo":
         for pl in pls:
             if pl["id"] == p.get("id"):
-                pl["memo"] = str(p.get("memo") or ""); pl["updated"] = now
+                pl["memo"] = _s(p.get("memo"))[:4000]; pl["updated"] = now
     else:
         return {"ok": False, "error": "unknown_op"}
     store.set_lists(d)
@@ -190,20 +268,27 @@ def artists_op(op: str, p: dict) -> dict:
         arts.append(a); by_id[a["id"]] = a
         return a["id"]
 
+    name = _s(p.get("name"))[:200]
     if op == "create":
-        ensure(p.get("name") or "이름 없음")
+        ensure(name or "이름 없음")
     elif op == "rename":
         a = by_id.get(p.get("id"))
-        if a and (p.get("name") or "").strip():
-            a["name"] = p["name"].strip()
+        if not a:
+            return {"ok": False, "error": "not_found"}
+        if name:
+            a["name"] = name
     elif op == "alias":
         a = by_id.get(p.get("id"))
-        al = (p.get("alias") or "").strip()
-        if a and al and al not in a["aliases"]:
+        al = _s(p.get("alias"))[:200]
+        if not a:
+            return {"ok": False, "error": "not_found"}
+        if al and al not in a["aliases"]:
             a["aliases"].append(al)
     elif op == "merge":   # from → into : from 의 이름은 into 의 별칭으로, 지정도 옮긴다
         src, dst = by_id.get(p.get("from")), by_id.get(p.get("into"))
-        if src and dst and src is not dst:
+        if not src or not dst:
+            return {"ok": False, "error": "not_found"}
+        if src is not dst:
             dst["aliases"] = list(dict.fromkeys(dst["aliases"] + [src["name"]] + src.get("aliases", [])))
             for t, aid in list(d["assign"].items()):
                 if aid == src["id"]:
@@ -212,19 +297,22 @@ def artists_op(op: str, p: dict) -> dict:
     elif op == "assign":   # titles[] → id 또는 name(없으면 생성). 자동 추출 키('auto:…')를 넘기면 그 이름으로 생성
         aid = p.get("id")
         if not aid or aid not in by_id:
-            aid = ensure(p.get("name") or "")
-        for t in p.get("titles") or []:
-            if t:
-                d["assign"][t] = aid
+            if not name:
+                return {"ok": False, "error": "empty_name", "message": "아티스트 이름이 비어 있습니다."}
+            aid = ensure(name)
+        for t in _titles(p.get("titles")):
+            d["assign"][t] = aid
     elif op == "unassign":
-        for t in p.get("titles") or []:
+        for t in _titles(p.get("titles")):
             d["assign"].pop(t, None)
     elif op == "delete":
         aid = p.get("id")
+        if aid not in by_id:
+            return {"ok": False, "error": "not_found"}
         d["artists"] = [a for a in arts if a["id"] != aid]
         d["assign"] = {t: v for t, v in d["assign"].items() if v != aid}
     elif op == "noise":   # 잡음어 추가/제거
-        w = (p.get("word") or "").strip().lower()
+        w = _s(p.get("word")).lower()[:50]
         if w:
             if p.get("remove"):
                 d["noise"] = [x for x in d["noise"] if x != w]
@@ -240,9 +328,13 @@ def artists_op(op: str, p: dict) -> dict:
 def _activity() -> dict:
     a = _cli("get_activity", timeout=30)
     perf = (a.body or {}).get("Performance") if isinstance(a.body, dict) else None
-    # 재생 중이면 마지막으로 튼 곡의 길이를 기억해 둔다 (목록 총길이·진행 막대용)
+    # 재생 중이면 마지막으로 튼 곡의 길이를 기억해 둔다 (목록 총길이·진행 막대용).
+    # 게임 쪽 MusicTitle 은 '악보: ' 접두가 없으므로 접두를 뗀 뒤 같은 곡일 때만 기록 (게임에서 직접 튼 다른 곡이 덮어쓰지 않게)
     if isinstance(perf, dict) and perf.get("IsPlaying") and _last_play.get("title"):
-        store.set_duration(_last_play["title"], perf.get("TotalDurationSeconds") or 0)
+        mine = _PFX.sub("", _last_play["title"]).strip()
+        theirs = _PFX.sub("", str(perf.get("MusicTitle") or "")).strip()
+        if mine and (not theirs or mine == theirs):
+            store.set_duration(_last_play["title"], perf.get("TotalDurationSeconds") or 0)
     return a.to_dict()
 
 
@@ -252,6 +344,14 @@ def play(title: str, instrument: str | None) -> dict:
     if not (title or "").strip():
         return {"ok": False, "steps": [], "error": "empty_title", "message": "재생할 악보 제목이 비어 있습니다."}
     s = store.get_settings()
+    inst = instrument if isinstance(instrument, str) and instrument.strip() else (s.get("default_inst") or None)
+    # 없는 악보/악기는 현재 연주를 끊기 전에 걸러낸다 (캐시가 있을 때만 검사)
+    cache = [lib.pick(x, lib.TITLE_KEYS) for x in store.get_cache("scores")["items"] if isinstance(x, dict)]
+    if cache and title not in cache:
+        return {"ok": False, "steps": [], "error": "not_found", "message": "보관함에 없는 악보입니다. 갱신 후 다시 시도하세요."}
+    insts = [lib.pick(x, lib.NAME_KEYS) for x in store.get_cache("instruments")["items"] if isinstance(x, dict)]
+    if inst and insts and inst not in insts:
+        return {"ok": False, "steps": [], "error": "not_found", "message": f"보유하지 않은 악기입니다: {inst}"}
     if s.get("stop_before_play"):
         a = _cli("get_activity", timeout=30)
         perf = (a.body or {}).get("Performance") if isinstance(a.body, dict) else None
@@ -260,15 +360,18 @@ def play(title: str, instrument: str | None) -> dict:
             out["steps"].append(r0.to_dict()); _note(r0, "현재 연주 정지")
             if r0.error == "invalid_state":
                 time.sleep(0.8)
-    inst = instrument if instrument is not None else (s.get("default_inst") or None)
     if inst:
         r = _cli("change_instrument", {"name": inst}, timeout=120)
         out["steps"].append(r.to_dict()); _note(r, f"악기 → {inst}")
         if not r.ok:
             out["ok"] = False
             return out
-    r = _cli("play_music_score", {"title": title}, timeout=660)
-    out["steps"].append(r.to_dict()); _note(r, f"재생 · {title}")
+    for attempt in range(4):   # 정지 직후 상태 전이 중이면 invalid_state → 짧게 재시도 (다음 곡으로 건너뛰지 않게)
+        r = _cli("play_music_score", {"title": title}, timeout=660)
+        out["steps"].append(r.to_dict()); _note(r, f"재생 · {title}" + (f" (재시도 {attempt})" if attempt else ""))
+        if r.ok or r.error != "invalid_state":
+            break
+        time.sleep(0.8 + 0.4 * attempt)
     out["ok"] = r.ok
     if r.ok:
         _last_play.update({"title": title, "inst": inst or ""})
@@ -309,6 +412,8 @@ class H(SimpleHTTPRequestHandler):
     def do_GET(self):
         u = urlparse(self.path)
         q = {k: v[0] for k, v in parse_qs(u.query).items()}
+        if u.path == "/api/health":   # 일렉트론 셸이 "이 포트가 정말 악보함인지" 확인하는 용도
+            return _json(self, {"app": "scorebox", "version": VERSION, "pid": os.getpid(), "data_dir": store.DATA_DIR, "frozen": FROZEN})
         if u.path == "/api/state":
             sc, ins = store.get_cache("scores"), store.get_cache("instruments")
             return _json(self, {"cli": cli.probe(), "scores": {"fetched_at": sc["fetched_at"], "count": len(sc["items"])},
@@ -320,7 +425,9 @@ class H(SimpleHTTPRequestHandler):
                 it["duration"] = dur.get(it["title"]); it["lastPlayed"] = rec.get(it["title"])
             found = lib.search(items, q.get("q", ""))
             if q.get("view") == "recent":
-                found = sorted([it for it in found if it["lastPlayed"]], key=lambda it: -it["lastPlayed"])
+                seen: set[str] = set()
+                found = [it for it in sorted([it for it in found if it["lastPlayed"]], key=lambda it: -it["lastPlayed"])
+                         if not (it["title"] in seen or seen.add(it["title"]))]
             if q.get("initial"):
                 found = [it for it in found if it["initial"] == q["initial"]]
             if q.get("artist"):                       # artistKey (수동 id 또는 'auto:…')
@@ -353,25 +460,70 @@ class H(SimpleHTTPRequestHandler):
             if command.startswith(("execute_", "complete_", "write_", "play_", "change_", "stop_", "stand_")):
                 return _json(self, {"ok": False, "error": "not_allowed"}, 403)
             return _json(self, _cli(command, q.get("body"), timeout=120).to_dict())
+        if u.path.startswith("/api/"):
+            return _json(self, {"ok": False, "error": "not_found"}, 404)
         if u.path == "/":
             self.path = "/index.html"
         return super().do_GET()
 
+    def _guard(self) -> bool:
+        """CSRF 방지: 브라우저의 다른 사이트가 보낸 폼/스크립트 요청을 거른다.
+        (1) Host 가 우리 주소, (2) Origin 이 있으면 우리 출처, (3) UI/셸이 붙이는 X-Requested-With 헤더."""
+        host = (self.headers.get("Host") or "").lower()
+        origin = (self.headers.get("Origin") or "").lower()
+        if host not in _ok_hosts:
+            return False
+        if origin and origin not in (f"http://127.0.0.1:{PORT}", f"http://localhost:{PORT}"):
+            return False
+        return self.headers.get("X-Requested-With") == "scorebox"
+
     def do_POST(self):
+        try:
+            self._post()
+        except Exception as e:   # 어떤 입력에도 연결을 끊지 않고 JSON 으로 답한다
+            import traceback; traceback.print_exc()
+            try:
+                _json(self, {"ok": False, "error": "internal", "message": f"{type(e).__name__}: {e}"}, 500)
+            except Exception:
+                pass
+
+    def _post(self):
         u = urlparse(self.path)
+        if not self._guard():
+            return _json(self, {"ok": False, "error": "forbidden", "message": "허용되지 않은 출처의 요청입니다."}, 403)
         p = _read_json(self)
+        if "_error" in p:
+            return _json(self, {"ok": False, "error": "bad_request", "message": p["_error"]}, 400)
+        if u.path == "/api/quit":     # 셸이 창을 닫을 때 정상 종료 요청 (taskkill 대신 → PyInstaller 임시폴더 정리됨)
+            _json(self, {"ok": True})
+            threading.Thread(target=_shutdown, daemon=True).start()
+            return
         if u.path == "/api/sync":
             return _json(self, sync())
         if u.path == "/api/play":
-            return _json(self, play(str(p.get("title", "")), p.get("instrument") or None))
+            return _json(self, play(_s(p.get("title")), _s(p.get("instrument")) or None))
         if u.path == "/api/stop":
             return _json(self, stop())
         if u.path == "/api/playlists":
-            return _json(self, lists_op(str(p.get("op", "")), p))
+            r = lists_op(_s(p.get("op")), p)
+            if not r.get("ok"):
+                r = {**store.get_lists(), **r}   # 실패해도 UI 가 목록 상태를 잃지 않게
+            return _json(self, r, 200 if r.get("ok") else 400)
         if u.path == "/api/artists":
-            return _json(self, artists_op(str(p.get("op", "")), p))
+            r = artists_op(_s(p.get("op")), p)
+            if not r.get("ok"):
+                r = {**store.get_artists(), **r}
+            return _json(self, r, 200 if r.get("ok") else 400)
         if u.path == "/api/settings":
-            s = store.set_settings(p.get("settings") or {})
+            patch = p.get("settings")
+            if not isinstance(patch, dict):
+                return _json(self, {"ok": False, "error": "bad_request", "message": "settings 는 객체여야 합니다."}, 400)
+            exe = patch.get("cli_exe")
+            if isinstance(exe, str) and exe.strip():
+                e = exe.strip()
+                if not (os.path.isabs(e) and e.lower().endswith(".exe") and os.path.isfile(e)):
+                    return _json(self, {"ok": False, "error": "bad_cli_exe", "message": "CLI 경로는 존재하는 .exe 의 절대 경로여야 합니다."}, 400)
+            s = store.set_settings(patch)
             cli.set_exe_override(s.get("cli_exe"))
             return _json(self, {"ok": True, "settings": s, "cli": cli.probe()})
         return _json(self, {"ok": False, "error": "not_found"}, 404)
@@ -419,15 +571,18 @@ _open_browser = _open_window   # 이전 이름 호환
 
 
 def main() -> None:
+    global _srv
     os.makedirs(store.DATA_DIR, exist_ok=True)
     try:
         srv = ThreadingHTTPServer(("127.0.0.1", PORT), H)
+        _srv = srv
     except OSError:
         # 이미 떠 있음(포트 사용 중) → 창만 다시 연다
         print(f"[mabi-playlist] port {PORT} busy — opening browser only", flush=True)
         _open_browser(); time.sleep(1.5)
         return
     print(f"[mabi-playlist] http://127.0.0.1:{PORT}  cli={cli.find_exe()}  frozen={FROZEN}", flush=True)
+    _watch_parent()
     _open_browser()
     try:
         srv.serve_forever()

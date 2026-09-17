@@ -30,9 +30,9 @@ EXIT_MEANING = {0: "ok", 2: "usage_error", 3: "canceled", 4: "unknown_command", 
 _override: str = ""   # 설정(data/settings.json)의 cli_exe — server 가 set_exe_override 로 넣는다
 
 
-def set_exe_override(path: str | None) -> None:
+def set_exe_override(path) -> None:
     global _override
-    _override = (path or "").strip()
+    _override = path.strip() if isinstance(path, str) else ""
 
 
 def find_exe() -> str | None:
@@ -47,7 +47,7 @@ def find_exe() -> str | None:
                 return c
             continue
         try:
-            r = subprocess.run(["where", c], capture_output=True, timeout=5, creationflags=CREATE_NO_WINDOW)
+            r = subprocess.run(["where", c], capture_output=True, stdin=subprocess.DEVNULL, timeout=5, creationflags=CREATE_NO_WINDOW)
             if r.returncode == 0 and r.stdout.strip():
                 return _decode(r.stdout).splitlines()[0].strip()
         except Exception:
@@ -97,9 +97,12 @@ class CliResult:
                 "message": self.message, "body": self.body, "elapsed": round(self.elapsed, 3), "source": self.source}
 
 
-def _read_last_response() -> object | None:
+def _read_last_response(since: float) -> object | None:
+    """이번 호출(since) 이후에 갱신된 파일만 믿는다 — 예전 다른 명령의 응답이 이번 결과로 둔갑하지 않게."""
     try:
-        with open(LAST_RESPONSE, encoding="utf-8") as f:
+        if os.path.getmtime(LAST_RESPONSE) < since - 1.0:
+            return None
+        with open(LAST_RESPONSE, encoding="utf-8-sig") as f:
             return json.load(f)
     except Exception:
         return None
@@ -116,7 +119,7 @@ def call(command: str, body: str | dict | list | None = None, timeout: float = 6
         args.append(enc)
     t0 = time.time()
     try:
-        p = subprocess.run(args, capture_output=True, timeout=timeout, creationflags=CREATE_NO_WINDOW)
+        p = subprocess.run(args, capture_output=True, stdin=subprocess.DEVNULL, timeout=timeout, creationflags=CREATE_NO_WINDOW)
     except subprocess.TimeoutExpired:
         return CliResult(command, -2, None, False, "timeout", f"{timeout:.0f}s 안에 응답이 없습니다.", elapsed=time.time() - t0)
     except OSError as e:
@@ -130,7 +133,7 @@ def call(command: str, body: str | dict | list | None = None, timeout: float = 6
         except json.JSONDecodeError:
             parsed = None
     if parsed is None and command not in LOCAL_COMMANDS:
-        lr = _read_last_response()
+        lr = _read_last_response(t0)
         if lr is not None:
             parsed, source = lr, "last-response"
     res = CliResult(command, p.returncode, parsed, False, None, "", raw, time.time() - t0, source)

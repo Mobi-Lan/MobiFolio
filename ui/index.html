@@ -174,7 +174,7 @@ dialog{background:var(--card);color:var(--ink);border:1px solid var(--line);bord
 
 <script>
 const $=(id)=>document.getElementById(id);
-const api=async(path,body)=>{const r=await fetch(path,body?{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}:undefined);return r.json();};
+const api=async(path,body)=>{try{const r=await fetch(path,{method:body?"POST":"GET",headers:{"Content-Type":"application/json","X-Requested-With":"scorebox"},body:body?JSON.stringify(body):undefined});const j=await r.json();if(j&&typeof j==="object"&&!("ok"in j)&&r.ok)return j;if(!r.ok&&j&&typeof j==="object"&&!("ok"in j))j.ok=false;return j;}catch(e){return {ok:false,error:"network",message:String(e.message||e)};}};
 const esc=(s)=>String(s??"").replace(/[&<>"]/g,(c)=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const INDEX="ㄱㄴㄷㄹㅁㅂㅅㅇㅈㅊㅋㅌㅍㅎABCDEFGHIJKLMNOPQRSTUVWXYZ#";
 const fmtSec=(s)=>{s=Math.max(0,Math.floor(s||0));return `${Math.floor(s/60)}:${String(s%60).padStart(2,"0")}`;};
@@ -220,7 +220,11 @@ async function loadAll(){const [sc,ls,ar,ins,st]=await Promise.all([api("/api/sc
 async function loadLog(){const d=await api("/api/log");S.logs=d.items;renderLog();}
 
 /* ── 렌더: 레일 ── */
-function render(){renderTree();renderMid();renderSel();renderQueue();}
+function refreshQueue(){ // 재생 중인 재생목록(src="pl:<id>")이 편집되면 큐도 그 목록을 따라간다 (삭제된 곡은 안 틀고, 순서·악기 변경 반영)
+  if(!S.src||!S.src.startsWith("pl:"))return;const pl=S.lists.playlists.find((x)=>"pl:"+x.id===S.src);if(!pl)return;
+  const cur=S.queue[S.qi];const q=pl.items.map((x)=>({title:x.title,inst:x.inst||""}));if(JSON.stringify(q)===JSON.stringify(S.queue))return;
+  S.queue=q;S.qi=cur?q.findIndex((x)=>x.title===cur.title):-1;if(S.qi<0&&cur){S.qi=Math.min(S.queue.length-1,Math.max(0,q.length?0:-1));}makeOrder();}
+function render(){refreshQueue();renderTree();renderMid();renderSel();renderQueue();}
 function renderTree(){
   const {folders,playlists}=S.lists,v=S.view,el=$("tree");
   const byParent=(pid)=>folders.filter((f)=>(f.parent||null)===pid),plsIn=(fid)=>playlists.filter((p)=>(p.folder||null)===fid);
@@ -378,36 +382,59 @@ function renderSel(){const it=S.sel?S.byTitle.get(S.sel):null;$("selMeta").textC
 function qOrder(){return S.order.length?S.order:S.queue.map((_,i)=>i);}
 function qPos(){return qOrder().indexOf(S.qi);}
 function makeOrder(){const idx=S.queue.map((_,i)=>i);if(!S.shuffle){S.order=idx;return;}const cur=S.qi;const rest=idx.filter((i)=>i!==cur);for(let i=rest.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[rest[i],rest[j]]=[rest[j],rest[i]];}S.order=cur>=0?[cur,...rest]:rest;}
-async function playFrom(list,index,src){if(!list.length||index<0)return;S.queue=list.map((x)=>({title:x.title,inst:x.inst||""}));S.qi=index;S.src=src;makeOrder();await playIndex(index);}
-async function playIndex(i){if(S.switching)return;clearTimeout(S.gapT);const it=S.queue[i];if(!it)return;S.switching=true;S.qi=i;S.manualStop=false;try{
+async function playFrom(list,index,src){if(S.switching||!list.length||index<0)return;S.queue=list.map((x)=>({title:x.title,inst:x.inst||""}));S.qi=index;S.src=src;makeOrder();await playIndex(index);}
+async function playIndex(i){if(S.switching)return;clearTimeout(S.gapT);const it=S.queue[i];if(!it)return;S.switching=true;S.gen=(S.gen||0)+1;S.qi=i;S.manualStop=false;try{
   const lib=S.byTitle.get(it.title);S.now={title:it.title,inst:it.inst||S.instrument||"",song:lib?(lib.song||lib.cleaned):it.title,artist:lib?lib.artist:""};
   $("nowTitle").textContent=S.now.song;$("nowSub").textContent="전송 중…";$("prog").style.width="0%";$("tEl").textContent="0:00";$("tTot").textContent=(lib&&lib.duration)?fmtSec(lib.duration):"0:00";
   const r=await api("/api/play",{title:it.title,instrument:it.inst||S.instrument||null});
-  S.playing=r.ok;S.startedAt=Date.now();
-  if(!r.ok){$("nowSub").textContent="실패: "+(r.error||r.steps?.at(-1)?.error||"")+" "+(r.message||r.steps?.at(-1)?.message||"");loadLog();if(S.queue.length>1){S.gapT=setTimeout(()=>advance(1),1500);}return;}
-  setMain(true);startPoll();loadLog();renderMid();renderQueue();renderTree();}finally{S.switching=false;}}
+  S.playing=r.ok;S.startedAt=Date.now();S.lastRemain=null;
+  if(!r.ok){const err=r.error||r.steps?.at(-1)?.error||"",msg=r.message||r.steps?.at(-1)?.message||"";
+    $("nowSub").textContent="실패: "+err+" "+msg;loadLog();clearInterval(S.pollT);S.pollT=null;setMain(false);
+    S.failRun=(S.failRun||0)+1;
+    const fatal=["cli_not_found","disconnected","game_off","option_off","timeout","spawn_failed","network","forbidden"].includes(err);
+    if(fatal||S.failRun>Math.min(3,S.queue.length)){S.failRun=0;$("nowSub").textContent="재생 실패: "+err+" "+msg;renderQueue();return;}
+    if(S.queue.length>1){S.gapT=setTimeout(()=>advance(1),1500);}return;}
+  S.failRun=0;setMain(true);startPoll();loadLog();renderMid();renderQueue();renderTree();}finally{S.switching=false;}}
 function setMain(playing){$("mainIcon").innerHTML=`<use href="#ic-${playing?"stop":"play"}"/>`;$("nowBadge").hidden=!playing;}
+function fmtSecSafe(v){return v&&isFinite(v)?fmtSec(v):"0:00";}
 function startPoll(){clearInterval(S.pollT);S.pollT=setInterval(pollAct,1000);}
 async function advance(dir){ // dir=+1 다음, -1 이전, 0 자동(다음)
-  if(S.advancing||S.switching)return;S.advancing=true;clearTimeout(S.gapT);const ord=qOrder();let pos=ord.indexOf(S.qi);
-  if(S.repeat==="one"&&dir===0){await playIndex(S.qi);S.advancing=false;return;}
-  pos+=dir===0?1:dir;
-  if(pos>=ord.length){if(S.repeat==="all"){pos=0;}else{await stopAll("재생목록 끝");S.advancing=false;return;}}
-  if(pos<0)pos=S.repeat==="all"?ord.length-1:0;
-  await playIndex(ord[pos]);S.advancing=false;}
-async function stopAll(msg){clearInterval(S.pollT);clearTimeout(S.gapT);S.playing=false;setMain(false);$("nowSub").textContent=msg||"대기";$("prog").style.width="0%";renderMid();renderQueue();renderTree();}
+  if(S.advancing||S.switching)return;S.advancing=true;clearTimeout(S.gapT);S.gapT=null;
+  try{let ord=qOrder();let pos=ord.indexOf(S.qi);
+    if(S.repeat==="one"&&dir===0){await playIndex(S.qi);return;}
+    pos+=dir===0?1:dir;
+    if(pos>=ord.length){
+      if(S.repeat==="all"){if(S.shuffle){S.qi=-1;makeOrder();ord=qOrder();}pos=0;}
+      else{if(S.playing){S.manualStop=true;await api("/api/stop",{});}await stopAll("재생목록 끝");return;}}
+    if(pos<0)pos=S.repeat==="all"?ord.length-1:0;
+    await playIndex(ord[pos]);}
+  finally{S.advancing=false;}}
+async function stopAll(msg){clearInterval(S.pollT);S.pollT=null;clearTimeout(S.gapT);S.gapT=null;S.playing=false;setMain(false);$("nowSub").textContent=msg||"대기";$("prog").style.width="0%";renderMid();renderQueue();renderTree();}
+let pollBusy=false;
 async function pollAct(){
-  if(S.switching)return;
-  const a=await api("/api/activity");if(S.switching)return;const p=(a.body||{}).Performance||{};const s=S.settings;const sinceStart=(Date.now()-S.startedAt)/1000;
-  if(p.IsPlaying){const tot=p.TotalDurationSeconds||0,el=p.ElapsedSeconds||0,localEl=(Date.now()-S.startedAt)/1000;
-    $("nowSub").textContent=`${p.MusicTitle||S.now?.song||""} · ${p.InstrumentName||""}${p.IsLoop?" · 반복 설정":""}${S.src.startsWith("pl:")?` · ${qPos()+1}/${S.queue.length}`:""}`;
+  if(S.switching||pollBusy)return;pollBusy=true;
+  try{
+  if(!S.playing&&!S.gapT){clearInterval(S.pollT);S.pollT=null;return;}   // 볼 게 없으면 폴링 종료 (CLI 호출 낭비 방지)
+  const gen=S.gen;const a=await api("/api/activity");if(S.switching||gen!==S.gen)return;
+  if(!a||!a.ok||!a.body||typeof a.body.Performance!=="object"){S.pollErr=(S.pollErr||0)+1;if(S.pollErr>=5){S.pollErr=0;await stopAll("CLI 응답 없음 — 재생 감시를 멈췄습니다");}return;}
+  S.pollErr=0;const p=a.body.Performance||{};const s=S.settings;const sinceStart=(Date.now()-S.startedAt)/1000;
+  if(p.IsPlaying){const cached=(S.byTitle.get(S.now?.title)||{}).duration||0;const tot=p.TotalDurationSeconds||cached||0,el=p.ElapsedSeconds||0;
+    if(el>0&&S.startedAt>Date.now()-el*1000-1500)S.startedAt=Date.now()-el*1000;   // 게임의 경과와 맞춘다 (준비 동작 지연 보정)
+    const localEl=(Date.now()-S.startedAt)/1000;S.lastRemain=tot?tot-el:null;
+    $("nowSub").textContent=`${p.InstrumentName||""}${p.IsLoop?" · 반복 설정":""}${S.src.startsWith("pl:")?` · ${qPos()+1}/${S.queue.length}`:""}`;
     $("tEl").textContent=fmtSec(el);$("tTot").textContent=fmtSec(tot);$("prog").style.width=(tot?Math.min(100,el/tot*100):0)+"%";
     if(S.playing&&tot&&!S.advancing&&((tot-el)<=(s.advance_margin??2)||localEl>=tot-1)){
-      await api("/api/stop",{});S.playing=false;const gap=(s.gap_sec??2)*1000;$("nowSub").textContent=`다음 곡까지 ${s.gap_sec??2}초…`;clearTimeout(S.gapT);S.gapT=setTimeout(()=>advance(0),gap);}
+      const r=await api("/api/stop",{});if(gen!==S.gen||S.manualStop||!S.pollT)return;   // 그 사이 사용자가 정지했으면 그만
+      S.playing=false;const gap=(s.gap_sec??2)*1000;$("nowSub").textContent=`다음 곡까지 ${s.gap_sec??2}초…`;clearTimeout(S.gapT);S.gapT=setTimeout(()=>advance(0),gap);}
   }else if(S.playing){if(sinceStart<2.5)return;S.playing=false;if(S.manualStop){stopAll("정지됨");return;}
+    if(S.lastRemain!=null&&S.lastRemain>(s.advance_margin??2)+5){stopAll("게임에서 정지됨");return;}   // 끝나기 한참 전에 멈춤 = 게임 쪽에서 정지
     const gap=(s.gap_sec??2)*1000;$("nowSub").textContent=S.queue.length>1||S.repeat!=="off"?`연주 종료 · ${s.gap_sec??2}초 후 다음`:"연주 종료";clearTimeout(S.gapT);S.gapT=setTimeout(()=>advance(0),gap);}
+  }finally{pollBusy=false;}
 }
-$("btnMain").onclick=async()=>{if(S.playing){S.manualStop=true;clearTimeout(S.gapT);const r=await api("/api/stop",{});loadLog();await stopAll(r.ok?"정지됨":"정지 실패 — 잠시 후 다시");}else if(S.qi>=0&&S.queue[S.qi]){await playIndex(S.qi);}else if(S.sel){playFrom([{title:S.sel,inst:""}],0,"single");}};
+$("btnMain").onclick=async()=>{if(S.switching)return;
+  if(S.playing||S.gapT){S.manualStop=true;clearTimeout(S.gapT);S.gapT=null;S.gen=(S.gen||0)+1;const r=S.playing?await api("/api/stop",{}):{ok:true};loadLog();
+    if(r.ok){await stopAll("정지됨");}else{S.manualStop=false;$("nowSub").textContent="정지 실패 — 잠시 후 다시: "+(r.message||r.error||"");}}
+  else if(S.qi>=0&&S.queue[S.qi]){await playIndex(S.qi);}else if(S.sel){playFrom([{title:S.sel,inst:""}],0,"single");}};
 $("btnNext").onclick=()=>{if(!S.queue.length||S.switching||S.advancing)return;clearTimeout(S.gapT);advance(1);};
 $("btnPrev").onclick=async()=>{if(!S.queue.length||S.switching||S.advancing)return;clearTimeout(S.gapT);const el=(Date.now()-S.startedAt)/1000;if(S.playing&&el>4){await playIndex(S.qi);}else advance(-1);};
 function toggleShuffle(){S.shuffle=!S.shuffle;makeOrder();$("btnShuffle").classList.toggle("on",S.shuffle);renderQueue();if(S.view.kind==="pl")renderMid();}
@@ -464,6 +491,9 @@ $("sTest").onclick=async()=>{await api("/api/settings",{settings:{cli_exe:$("sCl
 /* ── 시작 ── */
 (async()=>{ddMake($("instDd"),instItems,()=>S.instrument,(v)=>{S.instrument=v;});const st=await refreshState();await loadAll();await loadLog();
   if(S.settings.auto_sync&&S.cliOk){$("btnSync").click();}
+  if(S.cliOk){const a=await api("/api/activity");const p=a&&a.ok&&a.body&&a.body.Performance;
+    if(p&&p.IsPlaying){S.now={title:"",inst:p.InstrumentName||"",song:p.MusicTitle||"",artist:""};S.playing=true;S.startedAt=Date.now()-(p.ElapsedSeconds||0)*1000;S.gen=(S.gen||0)+1;
+      $("nowTitle").textContent=p.MusicTitle||"게임에서 재생 중";$("nowSub").textContent="게임에서 재생 중 · "+(p.InstrumentName||"");setMain(true);startPoll();}}
   setInterval(refreshState,15000);setInterval(loadLog,6000);})();
 </script>
 </body>

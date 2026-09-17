@@ -1,9 +1,9 @@
-data/
-fixtures/
+/data/
+/fixtures/
 __pycache__/
 *.pyc
-build/
-dist/
+/build/
+/dist/
 *.spec
 *.log
 MabiScoreBox.exe

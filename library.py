@@ -19,7 +19,7 @@ _CHO_MERGE = {"ㄲ": "ㄱ", "ㄸ": "ㄷ", "ㅃ": "ㅂ", "ㅆ": "ㅅ", "ㅉ": "�
 INDEX_ORDER = list("ㄱㄴㄷㄹㅁㅂㅅㅇㅈㅊㅋㅌㅍㅎ") + list("ABCDEFGHIJKLMNOPQRSTUVWXYZ") + ["#"]
 _SEP = re.compile(r"[\s\-_·•.,()\[\]{}~!?/\\|:;\"'`+*&%$#@^=<>【】「」『』〈〉《》]+")
 # 아티스트/곡 구분자 (우선순위 순). 공백 하이픈 계열 먼저, 그다음 붙은 것들.
-_SPLITTERS = [" - ", " – ", " — ", " / ", " | ", " : ", "：", " by ", " BY ", "_", " -", "- ", "-", "–", "—", "/", "|"]
+_SPLITTERS = [" - ", " – ", " — ", " / ", " | ", " : ", " by ", " BY ", " -", "- ", "-", "–", "—", "_", "/", "|"]
 # 기본 잡음어: 제목에서 떼어내도 곡 식별에 영향 없는 것들. data/artists.json 의 noise 로 덧붙일 수 있다.
 DEFAULT_NOISE = [
     "악보", "ver", "ver.", "version", "버전", "cover", "커버", "remix", "리믹스", "편곡", "피아노", "piano", "ost",
@@ -35,7 +35,7 @@ _PREFIXES = [r"^악보\s*[:：]\s*", r"^[!@#$%*]+\s*", r"^[A-Za-z]_(?=\S)", r"^[
 CATEGORY_WORDS = ["동요", "영화", "뮤지컬", "애니", "애니메이션", "게임", "클래식", "jpop", "kpop", "j-pop", "k-pop", "ost",
                   "재즈버전", "재즈", "jazz", "피아노", "piano", "임시", "연습", "테스트", "test"]
 _VARIANT_TAIL = re.compile(r"[\s\-_]*(?:-|_|\s)(\d{1,2}|\d+합|test|TEST|테스트|재즈|jazz|rock\.?ver|Rock\.ver)\s*$")
-_ATTACHED_TAG = re.compile(r"(?<=[가-힣A-Za-z])(OST|ost)\s*$")   # '라퓨타OST' 처럼 붙어 있는 꼬리
+_ATTACHED_TAG = re.compile(r"(?:(?<=[가-힣])|(?<![A-Za-z]))(OST)\s*$")   # '라퓨타OST' 처럼 붙어 있는 꼬리 ('Ghost' 는 아님)
 
 
 def pick(obj: dict, keys: tuple[str, ...]) -> str:
@@ -70,7 +70,10 @@ def initial(s: str) -> str:
             return _CHO_MERGE.get(c, c)
         if ch.isascii() and ch.isalpha():
             return ch.upper()
-        if ch.isspace():
+        if ch.isdigit():
+            return "#"
+        cat = unicodedata.category(ch)
+        if ch.isspace() or cat[0] in "PSZMC":   # 따옴표·괄호·이모지·결합기호는 건너뛴다
             continue
         return "#"
     return "#"
@@ -98,19 +101,27 @@ def clean_title(title: str, noise: list[str] | None = None) -> tuple[str, list[s
     # 접두 태그 ('악보: ', 'A_', '!_', '1.', '@' …)
     for pat in _PREFIXES:
         t2, n = re.subn(pat, "", t)
-        if n and t2.strip():
+        if n:
             removed.append(t[: len(t) - len(t2)]); t = t2.strip()
-    # 변형 꼬리 ('-1' '-2' '-test' '-재즈' '-6합' …) → variant. 같은 곡의 파트/버전이 한 곡으로 묶이게
+    base = t   # 전부 떼어져 비면 여기로 돌아온다 ('악보: ' 접두는 뗀 상태)
+    # 변형 꼬리 ('-1' '-2' '-test' '-재즈' '-6합' …) → variant. 같은 곡의 파트/버전이 한 곡으로 묶이게.
+    # 숫자 꼬리는 '-'/'_' 로 붙은 경우('곡-1'), 또는 띄운 하이픈이라도 앞에 다른 구분자가 남는 경우('가수 - 곡 - 1')만.
+    # 'Route 66' 'Taylor Swift - 22' 처럼 숫자가 곡 제목인 경우는 남긴다.
     m = _VARIANT_TAIL.search(t)
     if m and len(t) - len(m.group(0)) >= 2:
-        variant = m.group(1); t = t[: m.start()].strip()
+        head, tail = t[: m.start()], m.group(0)
+        numeric = m.group(1).isdigit()
+        attached = ("-" in tail or "_" in tail) and not re.search(r"\s[-_]\s", tail)
+        if not numeric or attached or raw_left(head):
+            variant = m.group(1); t = head.strip()
     # 붙은 꼬리 태그 ('천공의성 라퓨타OST', '인터스텔라OST')
     m = _ATTACHED_TAG.search(t)
     if m and len(t) - len(m.group(0)) >= 2:
         tags.append("OST"); t = t[: m.start()].strip(" -_·•.,:/")
-    # 카테고리어 → tags (단독 토큰일 때만; '동요_루돌프' 처럼 붙은 것도 포함)
+    # 카테고리어 → tags. 맨 앞에서 _ - : / 로 이어지거나('동요_루돌프', '영화: 라라랜드'), 맨 끝 토큰일 때만
+    # ('재즈 카페' '피아노 치는 소녀' 처럼 제목 한가운데 있는 낱말은 건드리지 않는다)
     for w in CATEGORY_WORDS:
-        pat = re.compile(r"(?i)(?:^|(?<=[\s_\-:/(\[]))" + re.escape(w) + r"(?=$|[\s_\-:/)\]])")
+        pat = re.compile(r"(?i)^" + re.escape(w) + r"\s*[_\-:/]+\s*|(?:^|(?<=[\s_\-:/(\[]))" + re.escape(w) + r"\s*$")
         if pat.search(t):
             t2 = pat.sub(" ", t).strip(" -_·•.,:/")
             if t2:
@@ -127,18 +138,17 @@ def clean_title(title: str, noise: list[str] | None = None) -> tuple[str, list[s
         else:
             removed.pop() if removed else None
     words = set(w.lower() for w in (noise if noise is not None else DEFAULT_NOISE))
-    kept = []
-    for w in re.split(r"(\s+)", t):
-        if w.strip() == "":
-            kept.append(w); continue
-        core = w.strip(" .-_")
-        if core.lower() in words or re.fullmatch(r"(?i)v\d+|ver\.?\d*|\d+절", core):
-            removed.append(w)
-        else:
-            kept.append(w)
-    t = re.sub(r"\s{2,}", " ", "".join(kept)).strip(" -_·•.,:;/|")
+    # 잡음어는 꼬리 토큰만 뗀다 ('곡 cover', '곡 ver.2', '곡 - 완성본'). 'Mr. Brightside' 'Easy On Me' 처럼 제목 속 낱말은 유지.
+    def _is_noise(w: str) -> bool:
+        core = w.strip(" .-_()[]")
+        return bool(core) and (core.lower() in words or bool(re.fullmatch(r"(?i)v\d+|ver\.?\d*|\d+절", core)))
+    toks = t.split()
+    while len(toks) > 1 and _is_noise(toks[-1]):
+        removed.append(toks.pop())
+    t = " ".join(toks).strip(" -_·•.,:;/|")
     if not t:
-        return (title or "").strip(), removed, tags, variant
+        # 전부 떼어져 비면: 잡음어 떼기 전 텍스트 → '악보: ' 접두만 뗀 원본 → 원본
+        t = base.strip(" -_·•.,:;/|") or re.sub(_PREFIXES[0], "", (title or "").strip()).strip() or (title or "").strip()
     return t, removed, tags, variant
 
 
@@ -161,9 +171,11 @@ def split_artist(cleaned: str, numeric_artists: frozenset[str] = frozenset()) ->
     for sep in _SPLITTERS:
         if sep in t:
             a, b = t.split(sep, 1)
-            a, b = a.strip(" -_·•.,"), b.strip(" -_·•.,")
+            a, b = a.strip(" -_·•,"), b.strip(" -_·•.,")
             if not a or not b:
                 continue
+            if sep.strip().lower() == "by":   # '밤편지 by 아이유' → 오른쪽이 아티스트
+                a, b = b, a
             if _NUMERIC.match(a) and norm(a) in numeric_artists:
                 return a, b, "split"
             # 숫자만인 쪽은 곡 제목(0310 같은 것) → 다른 쪽이 아티스트
@@ -178,7 +190,7 @@ def split_artist(cleaned: str, numeric_artists: frozenset[str] = frozenset()) ->
                 return b, a, "split"
             # '내나이50에다시배우는악기' 같은 개인 태그: 글자+숫자 섞인 긴 덩어리는 아티스트로 안 본다
             if len(a) >= 8 and re.search(r"\d", a) and re.search(r"[가-힣A-Za-z]", a) and not _NUMERIC.match(a):
-                return "", b, ""
+                return "", b, "tag"
             return a, b, "split"
     return "", t, ""
 
@@ -190,6 +202,7 @@ class ArtistIndex:
     def __init__(self, state: dict):
         self.artists: dict[str, dict] = {a["id"]: a for a in state.get("artists", [])}
         self.assign: dict[str, str] = dict(state.get("assign", {}))          # 원본 제목 → artistId
+        self.assign_norm: dict[str, str] = {norm(t): a for t, a in self.assign.items()}   # 공백·기호만 다른 제목도 같은 지정
         self.noise: list[str] = list(DEFAULT_NOISE) + list(state.get("noise", []))
         self.by_norm: dict[str, str] = {}                                     # norm(이름/별칭) → artistId
         for a in self.artists.values():
@@ -204,23 +217,31 @@ class ArtistIndex:
     def display(self, artist_id: str) -> str:
         return self.artists.get(artist_id, {}).get("name", artist_id)
 
-    def find_in_title(self, cleaned: str) -> tuple[str | None, str]:
-        """제목 토큰 조합 안에 사전의 이름이 통째로 들어 있으면 그 아티스트. (긴 이름 우선)"""
-        n = norm(cleaned)
-        if not n:
-            return None, ""
-        best: tuple[int, str, str] | None = None
+    def find_in_title(self, cleaned: str) -> tuple[str | None, str, tuple[int, int]]:
+        """제목의 '토큰 경계' 안에 사전의 이름이 통째로 들어 있으면 (아티스트, 규칙, (시작, 끝)).
+        'IU' 가 'Aquarium' 속 iu 에 걸리지 않게 이름은 연속된 토큰 묶음과 통째로 같아야 한다. 긴 이름 우선."""
+        spans = [(m.start(), m.end(), norm(m.group(0))) for m in re.finditer(r"[^\s\-_·•.,()\[\]{}~!?/\\|:;\"'`+*&%$#@^=<>【】「」『』〈〉《》]+", cleaned)]
+        spans = [x for x in spans if x[2]]
+        if not spans:
+            return None, "", (0, 0)
+        cands: dict[str, tuple[int, int]] = {}
+        for i in range(len(spans)):
+            key = ""
+            for j in range(i, min(len(spans), i + 5)):
+                key += spans[j][2]
+                cands.setdefault(key, (spans[i][0], spans[j][1]))
+        best: tuple[int, str, str, tuple[int, int]] | None = None
         for key, aid in self.by_norm.items():
-            if key and key in n and (best is None or len(key) > best[0]):
-                best = (len(key), aid, key)
+            if key in cands and (best is None or len(key) > best[0]):
+                best = (len(key), aid, "dict", cands[key])
         if best:
-            return best[1], "dict"
+            return best[1], best[2], best[3]
         for key, disp in self.auto.items():
-            if key and key in n and len(key) >= 2 and (best is None or len(key) > best[0]):
-                best = (len(key), disp, key)
+            if len(key) >= 2 and key in cands and (best is None or len(key) > best[0]):
+                best = (len(key), disp, "auto", cands[key])
         if best:
-            return best[1], "auto"
-        return None, ""
+            return best[1], best[2], best[3]
+        return None, "", (0, 0)
 
 
 def build(scores: list, artist_state: dict | None = None) -> list[dict]:
@@ -230,21 +251,25 @@ def build(scores: list, artist_state: dict | None = None) -> list[dict]:
     exact: dict[str, int] = {}
     similar: dict[str, int] = {}
     # 사전 통과: 구분자 왼쪽에 숫자 이름이 2곡 이상 반복되면 밴드(0018)로 인정
-    left_counts: dict[str, int] = {}
+    left_counts: dict[str, set[str]] = {}
     for raw in scores:
         t0 = pick(raw, TITLE_KEYS) if isinstance(raw, dict) else str(raw)
-        a = raw_left(clean_title(t0, idx.noise)[0])
+        c0 = clean_title(t0, idx.noise)[0]
+        a = raw_left(c0)
         if a and _NUMERIC.match(a):
-            left_counts[norm(a)] = left_counts.get(norm(a), 0) + 1
-    numeric_artists = frozenset(k for k, c in left_counts.items() if c >= 2)
+            left_counts.setdefault(norm(a), set()).add(norm(c0))   # 같은 제목 두 벌은 한 곡
+    numeric_artists = frozenset(k for k, c in left_counts.items() if len(c) >= 2)
     for i, raw in enumerate(scores):
         if not isinstance(raw, dict):
             raw = {"DisplayTitle": str(raw)}
         title = pick(raw, TITLE_KEYS)
         exact[title] = exact.get(title, 0) + 1
-        similar[dup_key(title)] = similar.get(dup_key(title), 0) + 1
         cleaned, removed, tags, variant = clean_title(title, idx.noise)
+        similar[dup_key(cleaned)] = similar.get(dup_key(cleaned), 0) + 1
         artist, song, rule = split_artist(cleaned, numeric_artists)
+        # '곡 - 아티스트' 처럼 뒤집힌 제목: 오른쪽만 등록된 이름이면 바꿔 준다
+        if rule == "split" and idx.lookup(song) and not idx.lookup(artist):
+            artist, song = song, artist
         prelim.append({"i": i, "raw": raw, "title": title, "cleaned": cleaned, "removed": removed, "tags": tags, "variant": variant,
                        "artist_guess": artist, "song": song, "rule": rule})
     # 구분자로 뽑힌 아티스트를 자동 사전에 합류 (2회 이상이면 확신, 1회도 후보로)
@@ -264,22 +289,32 @@ def build(scores: list, artist_state: dict | None = None) -> list[dict]:
         artist_id: str | None = None
         artist_name = ""
         rule = ""
-        if title in idx.assign and idx.assign[title] in idx.artists:
-            artist_id = idx.assign[title]; artist_name = idx.display(artist_id); rule = "manual"
+        assigned = idx.assign.get(title) or idx.assign_norm.get(norm(title))
+        if assigned and assigned in idx.artists:
+            artist_id = assigned; artist_name = idx.display(artist_id); rule = "manual"
         elif p["artist_guess"] and idx.lookup(p["artist_guess"]):
             artist_id = idx.lookup(p["artist_guess"]); artist_name = idx.display(artist_id); rule = "dict"
         elif p["artist_guess"]:
             artist_name = idx.auto.get(norm(p["artist_guess"]), p["artist_guess"]); rule = "split"
         else:
-            hit, r = idx.find_in_title(p["cleaned"])
-            if hit and r == "dict":
-                artist_id = hit; artist_name = idx.display(hit); rule = "dict"
-            elif hit and r == "auto":
-                artist_name = hit; rule = "auto"
-        song = p["song"] if rule else p["cleaned"]
-        if rule in ("dict", "auto", "manual") and artist_name and not p["artist_guess"]:
-            # 구분자 없이 이름이 들어 있던 경우: 곡 제목에서 아티스트 이름을 뺀다
-            song = re.sub(re.escape(artist_name), "", p["cleaned"], flags=re.I).strip(" -_·•.,:") or p["cleaned"]
+            hit, r, span = idx.find_in_title(p["cleaned"])
+            if hit:
+                # 구분자 없이 이름이 들어 있던 경우: 매칭된 구간만 떼어 곡 제목으로. 이름이 제목 전부면(곡이 남지 않으면) 지정하지 않는다
+                rest = (p["cleaned"][: span[0]] + " " + p["cleaned"][span[1]:]).strip(" -_·•.,:")
+                if rest:
+                    if r == "dict":
+                        artist_id = hit; artist_name = idx.display(hit); rule = "dict"
+                    else:
+                        artist_name = hit; rule = "auto"
+                    p["song"] = rest
+        song = p["song"] or p["cleaned"]
+        if rule == "manual" and artist_name and not p["artist_guess"] and song == p["cleaned"]:
+            # 수동 지정인데 구분자가 없던 제목: 이름이 토큰 경계로 들어 있으면 떼어 준다
+            _h, _r, span = idx.find_in_title(p["cleaned"])
+            if _h == artist_id and span[1] > span[0]:
+                rest = (p["cleaned"][: span[0]] + " " + p["cleaned"][span[1]:]).strip(" -_·•.,:")
+                if rest:
+                    song = rest
         akey = artist_id or (("auto:" + norm(artist_name)) if artist_name else "")
         items.append({
             "i": p["i"], "title": title, "cleaned": p["cleaned"], "removed": p["removed"], "tags": p["tags"], "variant": p["variant"],
