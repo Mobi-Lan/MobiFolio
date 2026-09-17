@@ -10,3 +10,4 @@ MobiFolioCore.exe
 .appwindow-profile/
 app/node_modules/
 dist-electron/
+/release/

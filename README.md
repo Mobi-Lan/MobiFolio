@@ -42,5 +42,11 @@
 ## 저장소
 `data/*.json` 은 UTF-8, 원자적 쓰기(스레드 잠금, 고유 임시파일, 공유 위반 재시도). 못 읽는 파일은 `<name>.corrupt-<ts>` 로 옮겨 두고 기본값으로 시작한다(원본 보존). 모양이 틀린 항목은 버린다.
 
+## 배포 (release.cmd)
+`build.cmd` 로 패키지를 만든 뒤 `release.cmd` 를 실행하면 `release/` 에 다음이 생긴다: `MobiFolio-win32-x64/`(무설치 사본), `MobiFolio-<버전>-portable.zip`, `MobiFolio-Setup-<버전>.exe`(NSIS 설치기: 사용자 폴더 설치, 관리자 권한 불필요, 시작 메뉴·바탕화면 바로가기 「모비폴리오」, 앱 제거 등록, 덮어쓰기 업그레이드), `SHA256SUMS.txt`. 설치기는 electron-builder 가 이미 패키징된 폴더를 그대로 감싸므로 퓨즈·아이콘·메타데이터가 빌드와 동일하다. 코드 서명이 없어 첫 실행 시 SmartScreen 경고가 뜬다(「추가 정보 → 실행」). 버전은 `app/package.json` 의 `version` 이 기준.
+
+## 라이선스
+Copyright (C) 2026 란님. All rights reserved. 배포된 실행 파일의 개인적·비상업적 사용만 허용하며, 재배포·수정본 배포·상업적 이용은 저작권자의 허락이 필요합니다. 자세한 내용은 `LICENSE`.
+
 ## 구조
 `cli_transport.py`(호출·인코딩·exit코드) · `store.py`(data/·fixtures/·설정 검증·잠금) · `library.py`(정규화·아티스트·초성·중복·검색) · `server.py`(API + UI 서빙 + 종료/헬스) · `ui/index.html` · `app/main.js`(일렉트론 셸) · `build.cmd`(exe + 패키지) · `run.cmd`(개발 실행).

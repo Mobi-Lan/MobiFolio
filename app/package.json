@@ -4,14 +4,38 @@
   "version": "0.1.0",
   "description": "MobiFolio — MABINOGI MOBILE FAN PROJECT: 내 악기·악보 재생목록",
   "main": "main.js",
+  "author": "란님",
   "private": true,
   "scripts": {
     "start": "electron .",
-    "package": "electron-packager . MobiFolio --platform=win32 --arch=x64 --out=../dist-electron --overwrite --extra-resource=../MobiFolioCore.exe --ignore=node_modules/.cache --win32metadata.CompanyName=Mobi-Lan --win32metadata.ProductName=MobiFolio --win32metadata.FileDescription=\"MobiFolio - MABINOGI MOBILE FAN PROJECT\" --win32metadata.OriginalFilename=MobiFolio.exe --icon=icon/MobiFolio.ico && node fuse.js"
+    "package": "electron-packager . MobiFolio --platform=win32 --arch=x64 --out=../dist-electron --overwrite --extra-resource=../MobiFolioCore.exe --ignore=node_modules/.cache --win32metadata.CompanyName=Mobi-Lan --win32metadata.ProductName=MobiFolio --win32metadata.FileDescription=\"MobiFolio - MABINOGI MOBILE FAN PROJECT\" --win32metadata.OriginalFilename=MobiFolio.exe --icon=icon/MobiFolio.ico && node fuse.js",
+    "installer": "electron-builder --win nsis --prepackaged ../dist-electron/MobiFolio-win32-x64 --publish never"
+  },
+  "build": {
+    "appId": "net.mobilan.mobifolio",
+    "productName": "MobiFolio",
+    "copyright": "Copyright (C) 2026 란님",
+    "directories": { "output": "../release" },
+    "win": { "icon": "icon/MobiFolio.ico", "target": ["nsis"], "signAndEditExecutable": false },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "모비폴리오",
+      "artifactName": "MobiFolio-Setup-${version}.exe",
+      "uninstallDisplayName": "MobiFolio (모비폴리오)",
+      "installerIcon": "icon/MobiFolio.ico",
+      "uninstallerIcon": "icon/MobiFolio.ico",
+      "installerLanguages": ["ko_KR"],
+      "language": "1042"
+    }
   },
   "devDependencies": {
     "@electron/fuses": "^2.1.3",
     "@electron/packager": "^20.3.0",
-    "electron": "^44.4.1"
+    "electron": "^44.4.1",
+    "electron-builder": "^26.15.3"
   }
 }
