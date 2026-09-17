@@ -396,6 +396,23 @@ def _activity() -> dict:
     return a.to_dict()
 
 
+def _mark_equipped(name: str) -> None:
+    """change_instrument 성공 후 instruments 캐시의 IsEquipped 를 앱이 아는 대로 맞춘다 (fetched_at 은 유지)."""
+    try:
+        with store.LOCK:
+            c = store.get_cache("instruments")
+            changed = False
+            for x in c["items"]:
+                if isinstance(x, dict):
+                    want = (lib.pick(x, lib.NAME_KEYS).strip() == name.strip())
+                    if bool(x.get("IsEquipped")) != want:
+                        x["IsEquipped"] = want; changed = True
+            if changed:
+                store.save("instruments.json", c)
+    except Exception as e:
+        print(f"[play] 장착 표시 갱신 실패: {e}", flush=True)
+
+
 def play(title: str, instrument: str | None) -> dict:
     """(설정) 연주 중이면 먼저 정지 → (악기 지정 시) change_instrument → play_music_score."""
     out = {"ok": True, "steps": []}
@@ -422,21 +439,25 @@ def play(title: str, instrument: str | None) -> dict:
             if r0.error == "invalid_state":
                 time.sleep(0.8)
     if inst:
+        # 이름 양끝에 공백이 있는 악기는 CLI 가 어떤 표기로도 못 찾는다(실측) — 이런 악기만 '이미 장착 중'이면 변경을 건너뛴다.
+        # 정상 이름은 항상 CLI 에 맡긴다 (CLI 가 "Already equipped." 로 즉시 답하고, 캐시는 마지막 갱신 시점이라 믿을 수 없다).
+        broken = inst != inst.strip() or inst not in insts
         equipped = next((lib.pick(x, lib.NAME_KEYS) for x in store.get_cache("instruments")["items"] if isinstance(x, dict) and x.get("IsEquipped")), "")
-        if equipped and equipped.strip() == inst.strip():
-            out["steps"].append({"command": "change_instrument", "ok": True, "skipped": True, "message": "이미 장착 중"})   # CLI 호출 생략
+        if broken and equipped and equipped.strip() == inst.strip():
+            out["steps"].append({"command": "change_instrument", "ok": True, "skipped": True, "message": "이미 장착 중 (마지막 갱신 기준)"})
         else:
             r = _cli("change_instrument", {"name": inst}, timeout=120)
             out["steps"].append(r.to_dict()); _note(r, f"악기 → {inst}")
-            if not r.ok and r.error == "not_found" and inst != inst.strip():   # 이름 끝 공백: CLI 가 못 찾으면 뗀 이름으로 한 번 더
+            if not r.ok and r.error == "not_found" and inst != inst.strip():   # 공백 뗀 이름으로 한 번 더 (CLI 가 고쳐질 때를 대비)
                 r = _cli("change_instrument", {"name": inst.strip()}, timeout=120)
                 out["steps"].append(r.to_dict()); _note(r, f"악기 → {inst.strip()} (공백 제거 재시도)")
             if not r.ok:
                 out["ok"] = False
-                if r.error == "not_found" and inst != inst.strip():
+                if r.error == "not_found" and broken:
                     out["error"] = "cli_instrument_name"
                     out["message"] = "게임 CLI 가 이 악기를 찾지 못합니다 (이름 끝 공백 때문 — CLI 쪽 문제). 게임에서 직접 장착한 뒤 악기를 「악기 그대로」로 두고 재생하세요."
                 return out
+            _mark_equipped(inst)   # 성공했으면 캐시의 장착 표시도 맞춘다 (다음 갱신 전까지 UI 「장착」 배지·건너뛰기 판정에 쓰임)
     for attempt in range(4):   # 정지 직후 상태 전이 중이면 invalid_state → 짧게 재시도 (다음 곡으로 건너뛰지 않게)
         r = _cli("play_music_score", {"title": title}, timeout=60)   # 즉시 반환 명령: 잠금을 오래 잡지 않게
         out["steps"].append(r.to_dict()); _note(r, f"재생 · {title}" + (f" (재시도 {attempt})" if attempt else ""))
