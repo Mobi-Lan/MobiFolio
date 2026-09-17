@@ -3,7 +3,7 @@
 - 비ASCII body 는 통째로 UTF-8 → base64 → "base64:" 접두 (JSON body 도 통째로).
 - stdout 은 바이트로 받아 utf-8 → mbcs 폴백으로 풀고 JSON 파서로 읽는다 (\\uXXXX 는 파서가 디코드).
 - exit 0 이 성공이 아니다: ok = exit==0 and "error" not in body.
-- status/capabilities 는 로컬 명령이라 last-response.json 을 갱신하지 않는다 → stdout 만 본다.
+- status/capabilities 는 last-response.json 을 갱신하지 않는다 → stdout 만 본다 (capabilities 도 게임이 꺼져 있으면 game_off).
 - 실행 명령은 최대 9분 블로킹 → 타임아웃 11분.
 """
 from __future__ import annotations
@@ -23,7 +23,7 @@ EXE_CANDIDATES = [
 ]
 LAST_RESPONSE = os.path.join(os.environ.get("LOCALAPPDATA", ""), "MabinogiMobileCLI", "last-response.json")
 CAPABILITIES_FILE = os.path.join(os.environ.get("LOCALAPPDATA", ""), "MabinogiMobileCLI", "CAPABILITIES.json")
-LOCAL_COMMANDS = {"status", "capabilities"}      # 게임까지 안 가는 명령: last-response.json 미갱신
+LOCAL_COMMANDS = {"status", "capabilities"}      # last-response.json 을 갱신하지 않는 명령 (폴백 생략)
 EXIT_MEANING = {0: "ok", 2: "usage_error", 3: "canceled", 4: "unknown_command", 5: "disconnected"}
 
 
@@ -157,7 +157,8 @@ def call(command: str, body: str | dict | list | None = None, timeout: float = 6
 def probe() -> dict:
     """UI 상태표시용: 실행파일 유무 + status."""
     exe = find_exe()
-    out = {"exe": exe, "found": exe is not None, "pipe": None, "reason": None}
+    out = {"exe": exe, "found": exe is not None, "pipe": None, "reason": None,
+           "override_invalid": bool(_override) and not os.path.exists(_override)}   # 설정 경로가 틀려 기본 경로로 폴백 중이면 알려 준다
     if exe:
         r = call("status", timeout=20)
         if isinstance(r.body, dict):

@@ -2,10 +2,11 @@
 
 동기화: POST /api/sync → get_instruments, get_music_scores 를 CLI 로 받아 data/ 에 저장 (+ fixtures/ 원본).
 재생:   POST /api/play {"title": DisplayTitle, "instrument": Name|null} → change_instrument → play_music_score.
-정지:   POST /api/stop → get_activity 로 MainButtonState 확인 후 stop_action (invalid_state 는 짧게 재시도).
+정지:   POST /api/stop → get_activity.Performance.IsPlaying 확인 후 stop_action (invalid_state 는 짧게 재시도).
 """
 from __future__ import annotations
 
+import errno
 import io
 import json
 import re
@@ -29,7 +30,10 @@ if FROZEN:
             os.remove(_logp)
     except OSError:
         pass
-    _logf = open(_logp, "a", encoding="utf-8", buffering=1)
+    try:
+        _logf = open(_logp, "a", encoding="utf-8", buffering=1)
+    except OSError:   # exe 옆에 쓸 수 없으면(읽기 전용 폴더 등) 임시 폴더로
+        _logf = open(os.path.join(os.environ.get("TEMP", "."), "mabi-scorebox.log"), "a", encoding="utf-8", buffering=1)
     sys.stdout = sys.stderr = _logf
 elif sys.stdout:
     sys.stdout.reconfigure(encoding="utf-8")
@@ -140,6 +144,12 @@ def _read_json(handler) -> dict:
 def _cli(command, body=None, timeout=660.0):
     with _cli_lock:
         return cli.call(command, body, timeout)
+
+
+def _probe() -> dict:
+    """cli.probe() 를 CLI 잠금 안에서 (한 번에 하나 규칙)."""
+    with _cli_lock:
+        return cli.probe()
 
 
 # ── 동기화 ──
@@ -367,7 +377,7 @@ def play(title: str, instrument: str | None) -> dict:
             out["ok"] = False
             return out
     for attempt in range(4):   # 정지 직후 상태 전이 중이면 invalid_state → 짧게 재시도 (다음 곡으로 건너뛰지 않게)
-        r = _cli("play_music_score", {"title": title}, timeout=660)
+        r = _cli("play_music_score", {"title": title}, timeout=60)   # 즉시 반환 명령: 잠금을 오래 잡지 않게
         out["steps"].append(r.to_dict()); _note(r, f"재생 · {title}" + (f" (재시도 {attempt})" if attempt else ""))
         if r.ok or r.error != "invalid_state":
             break
@@ -403,6 +413,8 @@ def stop() -> dict:
 
 
 class H(SimpleHTTPRequestHandler):
+    timeout = 30   # 느린/멈춘 클라이언트가 스레드를 무한 점유하지 않게
+
     def __init__(self, *a, **k):
         super().__init__(*a, directory=UI_DIR, **k)
 
@@ -416,7 +428,7 @@ class H(SimpleHTTPRequestHandler):
             return _json(self, {"app": "scorebox", "version": VERSION, "pid": os.getpid(), "data_dir": store.DATA_DIR, "frozen": FROZEN})
         if u.path == "/api/state":
             sc, ins = store.get_cache("scores"), store.get_cache("instruments")
-            return _json(self, {"cli": cli.probe(), "scores": {"fetched_at": sc["fetched_at"], "count": len(sc["items"])},
+            return _json(self, {"cli": _probe(), "scores": {"fetched_at": sc["fetched_at"], "count": len(sc["items"])},
                                 "instruments": {"fetched_at": ins["fetched_at"], "count": len(ins["items"])}})
         if u.path == "/api/scores":
             items = lib.build(store.get_cache("scores")["items"], store.get_artists())
@@ -453,11 +465,11 @@ class H(SimpleHTTPRequestHandler):
         if u.path == "/api/log":
             return _json(self, {"items": _log[:40]})
         if u.path == "/api/settings":
-            return _json(self, {"settings": store.get_settings(), "cli": cli.probe()})
+            return _json(self, {"settings": store.get_settings(), "cli": _probe()})
         if u.path.startswith("/api/cli/"):
             # 읽기 전용 명령 디버그 통로 (필드 모양 확인용). 실행 명령은 막는다.
             command = u.path[len("/api/cli/"):]
-            if command.startswith(("execute_", "complete_", "write_", "play_", "change_", "stop_", "stand_")):
+            if not (command in ("status", "capabilities") or command.startswith("get_")):   # 읽기 명령만 (화이트리스트)
                 return _json(self, {"ok": False, "error": "not_allowed"}, 403)
             return _json(self, _cli(command, q.get("body"), timeout=120).to_dict())
         if u.path.startswith("/api/"):
@@ -514,6 +526,18 @@ class H(SimpleHTTPRequestHandler):
             if not r.get("ok"):
                 r = {**store.get_artists(), **r}
             return _json(self, r, 200 if r.get("ok") else 400)
+        if u.path == "/api/cli_test":   # 설정 창 「연결 확인」: 저장하지 않고 그 경로로 status 만 호출
+            exe = _s(p.get("cli_exe"))
+            if exe and not (os.path.isabs(exe) and exe.lower().endswith(".exe") and os.path.isfile(exe)):
+                return _json(self, {"ok": False, "error": "bad_cli_exe", "message": "존재하는 .exe 의 절대 경로가 아닙니다."})
+            with _cli_lock:
+                old = cli._override
+                try:
+                    cli.set_exe_override(exe)
+                    res = cli.probe()
+                finally:
+                    cli.set_exe_override(old)
+            return _json(self, {"ok": True, "cli": res})
         if u.path == "/api/settings":
             patch = p.get("settings")
             if not isinstance(patch, dict):
@@ -525,7 +549,7 @@ class H(SimpleHTTPRequestHandler):
                     return _json(self, {"ok": False, "error": "bad_cli_exe", "message": "CLI 경로는 존재하는 .exe 의 절대 경로여야 합니다."}, 400)
             s = store.set_settings(patch)
             cli.set_exe_override(s.get("cli_exe"))
-            return _json(self, {"ok": True, "settings": s, "cli": cli.probe()})
+            return _json(self, {"ok": True, "settings": s, "cli": _probe()})
         return _json(self, {"ok": False, "error": "not_found"}, 404)
 
 
@@ -576,11 +600,14 @@ def main() -> None:
     try:
         srv = ThreadingHTTPServer(("127.0.0.1", PORT), H)
         _srv = srv
-    except OSError:
-        # 이미 떠 있음(포트 사용 중) → 창만 다시 연다
-        print(f"[mabi-playlist] port {PORT} busy — opening browser only", flush=True)
-        _open_browser(); time.sleep(1.5)
-        return
+    except OSError as e:
+        if e.errno in (errno.EADDRINUSE, 10048):
+            # 이미 떠 있음(포트 사용 중) → 창만 다시 연다
+            print(f"[mabi-playlist] port {PORT} busy — opening browser only", flush=True)
+            _open_browser(); time.sleep(1.5)
+            return
+        print(f"[mabi-playlist] port {PORT} bind failed: {e} (errno {e.errno}) — 예약 포트(Hyper-V/WinNAT)일 수 있습니다", flush=True)
+        sys.exit(1)
     print(f"[mabi-playlist] http://127.0.0.1:{PORT}  cli={cli.find_exe()}  frozen={FROZEN}", flush=True)
     _watch_parent()
     _open_browser()
