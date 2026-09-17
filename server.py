@@ -310,11 +310,45 @@ class H(SimpleHTTPRequestHandler):
         return _json(self, {"ok": False, "error": "not_found"}, 404)
 
 
-def _open_browser() -> None:
+def _find_app_browser() -> str | None:
+    """앱 모드(주소창·탭 없는 독립 창)를 지원하는 크로미엄 계열 브라우저. Edge 는 Windows 10/11 기본 내장."""
+    cands = []
+    for env in ("PROGRAMFILES(X86)", "PROGRAMFILES", "LOCALAPPDATA"):
+        base = os.environ.get(env, "")
+        if base:
+            cands += [os.path.join(base, "Microsoft", "Edge", "Application", "msedge.exe"),
+                      os.path.join(base, "Google", "Chrome", "Application", "chrome.exe")]
+    for c in cands:
+        if os.path.exists(c):
+            return c
+    return None
+
+
+def _open_window() -> None:
+    """브라우저 탭이 아니라 앱 창으로 연다. 전용 프로필을 써서 사용자의 Edge 세션과 섞이지 않는다."""
     if os.environ.get("MABI_NO_BROWSER"):
         return
-    import webbrowser
-    threading.Timer(0.8, lambda: webbrowser.open(f"http://127.0.0.1:{PORT}")).start()
+    url = f"http://127.0.0.1:{PORT}"
+
+    def go():
+        exe = _find_app_browser()
+        if exe:
+            profile = os.path.join(BASE, ".appwindow-profile")
+            args = [exe, f"--app={url}", "--window-size=1280,860", f"--user-data-dir={profile}",
+                    "--no-first-run", "--no-default-browser-check", "--disable-features=TranslateUI"]
+            try:
+                import subprocess
+                subprocess.Popen(args, creationflags=0x00000008)   # DETACHED_PROCESS
+                return
+            except OSError:
+                pass
+        import webbrowser
+        webbrowser.open(url)
+
+    threading.Timer(0.6, go).start()
+
+
+_open_browser = _open_window   # 이전 이름 호환
 
 
 def main() -> None:
