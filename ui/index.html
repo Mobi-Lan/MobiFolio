@@ -142,7 +142,7 @@ dialog{background:var(--card);color:var(--ink);border:1px solid var(--line);bord
 
 <div id="updBar" hidden><span id="updText"></span><span class="grow"></span><button class="small pri" id="updGo">지금 업데이트</button><button class="small ghost" id="updLater">나중에</button></div>
 <div class="grid">
-  <div class="card"><div class="chd">보관함<span class="grow"></span><button class="small ghost" id="btnNewFolder"><svg class="i s"><use href="#ic-folder"/></svg>폴더</button><button class="small pri" id="btnNewList"><svg class="i s"><use href="#ic-plus"/></svg>목록</button></div><div class="cbd tree" id="tree"></div></div>
+  <div class="card"><div class="chd">보관함<span class="grow"></span><button class="small pri" id="btnNewList"><svg class="i s"><use href="#ic-plus"/></svg>목록</button></div><div class="cbd tree" id="tree"></div></div>
 
   <div class="card">
     <div id="midHead"></div>
@@ -533,7 +533,7 @@ async function renameFolder(id){const f=S.lists.folders.find((x)=>x.id===id);con
 async function delPl(id){if(!confirm("이 재생목록을 삭제할까요?"))return;await listsApi({op:"delete",id});if(S.view.kind==="pl"&&S.view.id===id)S.view={kind:"lib"};render();}
 async function delFolder(id){if(!confirm("폴더를 삭제할까요? (안의 목록은 상위로 옮겨집니다)"))return;await listsApi({op:"folder_delete",id});renderTree();}
 function movePl(id){menu({clientX:280,clientY:140},[["(폴더 없음)",async()=>{await listsApi({op:"move",id,folder:null});render();}]].concat(S.lists.folders.map((f)=>[f.name,async()=>{await listsApi({op:"move",id,folder:f.id});render();}])));}
-$("btnNewList").onclick=()=>newList(null);$("btnNewFolder").onclick=()=>newFolder(null);
+$("btnNewList").onclick=()=>newList(null);
 
 /* ── 오른쪽 열: 선택 카드/큐 높이 드래그 (localStorage 에 기억), CLI 로그 팝업 ── */
 function layoutRight(){const q=$("queueCard").hidden;$("rcol").classList.toggle("noq",q);$("splitV").hidden=q;

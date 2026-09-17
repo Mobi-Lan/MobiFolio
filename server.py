@@ -72,7 +72,7 @@ PARENT = os.environ.get("MABI_PARENT_PID", "")
 LITE_FILE = os.path.join(BASE, "lite.json")   # 경량판이 떠 있는 포트 (두 번째 실행이 창만 다시 열 때 씀)
 UPDATE_DIR = os.path.join(BASE, "update")     # 받은 새 exe 와 교체 스크립트
 MAX_UPDATE_BYTES = 200 * 1024 * 1024
-VERSION = "0.1.4"
+VERSION = "0.1.5"
 _srv = None   # ThreadingHTTPServer (종료용)
 
 
