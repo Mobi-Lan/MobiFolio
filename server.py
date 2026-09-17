@@ -407,6 +407,9 @@ def play(title: str, instrument: str | None) -> dict:
     cache = [lib.pick(x, lib.TITLE_KEYS) for x in store.get_cache("scores")["items"] if isinstance(x, dict)]
     if cache and title not in cache:
         return {"ok": False, "steps": [], "error": "not_found", "message": "보관함에 없는 악보입니다. 갱신 후 다시 시도하세요."}
+    if title != title.strip():   # 실측: 제목 끝에 공백이 있으면 CLI 가 어떤 표기로도 못 찾는다 → 현재 연주를 끊기 전에 알린다
+        return {"ok": False, "steps": [], "error": "cli_title_name",
+                "message": "게임 CLI 가 제목 끝에 공백이 있는 악보를 찾지 못합니다 (CLI 쪽 문제). 게임에서 악보 이름의 끝 공백을 지운 뒤 갱신하면 재생됩니다."}
     insts = [lib.pick(x, lib.NAME_KEYS) for x in store.get_cache("instruments")["items"] if isinstance(x, dict)]
     if inst and insts and inst not in insts and inst.strip() not in [x.strip() for x in insts]:
         return {"ok": False, "steps": [], "error": "not_found", "message": f"보유하지 않은 악기입니다: {inst}"}

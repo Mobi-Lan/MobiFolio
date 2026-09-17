@@ -320,6 +320,7 @@ def build(scores: list, artist_state: dict | None = None) -> list[dict]:
             "i": p["i"], "title": title, "cleaned": p["cleaned"], "removed": p["removed"], "tags": p["tags"], "variant": p["variant"],
             "artist": artist_name, "artistKey": akey, "manual": rule == "manual",
             "song": song, "rule": rule or "none", "bucket": "artist" if artist_name else "other",
+            "cliBroken": title != title.strip(),   # 제목 끝 공백: 게임 CLI 의 play_music_score 가 못 찾는다 (실측) — 게임에서 이름을 고쳐야 함
             "location": p["raw"].get("Location", ""), "locked": bool(p["raw"].get("IsLocked", False)),
             "initial": initial(song or title), "norm": norm(title) + " " + norm(p["cleaned"]),
             "dupExact": exact.get(title, 1), "dupSimilar": similar.get(dup_key(title), 1),
