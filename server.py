@@ -34,6 +34,18 @@ import store                  # noqa: E402
 PORT = int(os.environ.get("MABI_PLAYLIST_PORT", "19997"))
 UI_DIR = os.path.join(RES, "ui")
 _cli_lock = threading.Lock()   # CLI 는 한 번에 하나만 (게임 파이프 직렬)
+_log: list[dict] = []          # 최근 CLI 응답 요약 (UI 「CLI 응답」)
+_last_play: dict = {"title": "", "inst": ""}   # 길이 캐시 키(DisplayTitle)용
+
+cli.set_exe_override(store.get_settings().get("cli_exe"))
+
+
+def _note(r, summary: str = "") -> None:
+    """CLI 결과를 로그에 남긴다 (최근 40건)."""
+    _log.insert(0, {"ts": time.time(), "command": r.command, "ok": r.ok, "error": r.error, "message": r.message,
+                    "elapsed": round(r.elapsed, 3), "summary": summary,
+                    "raw": (json.dumps(r.body, ensure_ascii=False)[:1500] if r.body is not None else r.raw[:1500])})
+    del _log[40:]
 
 
 def _json(handler, obj, status=200):
@@ -69,12 +81,15 @@ def sync() -> dict:
     out = {"ok": True, "steps": []}
     st = _cli("status", timeout=20)
     out["steps"].append(st.to_dict())
+    _note(st, "연결 확인")
     if not st.ok:
         out["ok"] = False
         return out
-    for command, kind in (("get_instruments", "instruments"), ("get_music_scores", "scores")):
+    for command, kind, label in (("get_instruments", "instruments", "악기"), ("get_music_scores", "scores", "악보")):
         r = _cli(command, "", timeout=120)   # 빈 필터 = 전체
-        out["steps"].append({**r.to_dict(), "body": None, "count": (len(r.body) if isinstance(r.body, list) else None)})
+        n = len(r.body) if isinstance(r.body, list) else None
+        out["steps"].append({**r.to_dict(), "body": None, "count": n})
+        _note(r, f"{label} {n}건 수신" if r.ok else f"{label} 수신 실패")
         if not r.ok:
             out["ok"] = False
             continue
@@ -124,19 +139,34 @@ def lists_op(op: str, p: dict) -> dict:
     elif op == "add":
         for pl in pls:
             if pl["id"] == p.get("id"):
+                have = {it["title"] for it in pl["items"]}
                 for t in p.get("titles") or []:
-                    if t and t not in pl["items"]:
-                        pl["items"].append(t)
+                    if t and t not in have:
+                        pl["items"].append({"title": t, "inst": ""}); have.add(t)
                 pl["updated"] = now
     elif op == "remove":
+        rm = set(p.get("titles") or [])
         for pl in pls:
             if pl["id"] == p.get("id"):
-                pl["items"] = [t for t in pl["items"] if t not in set(p.get("titles") or [])]; pl["updated"] = now
-    elif op == "reorder":
+                pl["items"] = [it for it in pl["items"] if it["title"] not in rm]; pl["updated"] = now
+    elif op == "reorder":   # items = 제목 순서 배열
         for pl in pls:
             if pl["id"] == p.get("id"):
-                order = [t for t in (p.get("items") or []) if t in pl["items"]]
-                pl["items"] = order + [t for t in pl["items"] if t not in order]; pl["updated"] = now
+                by = {it["title"]: it for it in pl["items"]}
+                order = [by[t] for t in (p.get("items") or []) if t in by]
+                seen = {it["title"] for it in order}
+                pl["items"] = order + [it for it in pl["items"] if it["title"] not in seen]; pl["updated"] = now
+    elif op == "set_inst":   # 곡별 악기. title 없으면 목록 전체
+        for pl in pls:
+            if pl["id"] == p.get("id"):
+                for it in pl["items"]:
+                    if not p.get("title") or it["title"] == p.get("title"):
+                        it["inst"] = p.get("inst") or ""
+                pl["updated"] = now
+    elif op == "memo":
+        for pl in pls:
+            if pl["id"] == p.get("id"):
+                pl["memo"] = str(p.get("memo") or ""); pl["updated"] = now
     else:
         return {"ok": False, "error": "unknown_op"}
     store.set_lists(d)
@@ -206,19 +236,42 @@ def artists_op(op: str, p: dict) -> dict:
 
 
 # ── 재생·정지 ──
+def _activity() -> dict:
+    a = _cli("get_activity", timeout=30)
+    perf = (a.body or {}).get("Performance") if isinstance(a.body, dict) else None
+    # 재생 중이면 마지막으로 튼 곡의 길이를 기억해 둔다 (목록 총길이·진행 막대용)
+    if isinstance(perf, dict) and perf.get("IsPlaying") and _last_play.get("title"):
+        store.set_duration(_last_play["title"], perf.get("TotalDurationSeconds") or 0)
+    return a.to_dict()
+
+
 def play(title: str, instrument: str | None) -> dict:
+    """(설정) 연주 중이면 먼저 정지 → (악기 지정 시) change_instrument → play_music_score."""
     out = {"ok": True, "steps": []}
     if not (title or "").strip():
-        return {"ok": False, "steps": [], "error": "empty_title", "message": "재생할 악보 제목이 비어 있습니다 (요청 인코딩 확인)."}
-    if instrument:
-        r = _cli("change_instrument", {"name": instrument}, timeout=120)
-        out["steps"].append(r.to_dict())
+        return {"ok": False, "steps": [], "error": "empty_title", "message": "재생할 악보 제목이 비어 있습니다."}
+    s = store.get_settings()
+    if s.get("stop_before_play"):
+        a = _cli("get_activity", timeout=30)
+        perf = (a.body or {}).get("Performance") if isinstance(a.body, dict) else None
+        if isinstance(perf, dict) and perf.get("IsPlaying"):
+            r0 = _cli("stop_action", timeout=60)
+            out["steps"].append(r0.to_dict()); _note(r0, "현재 연주 정지")
+            if r0.error == "invalid_state":
+                time.sleep(0.8)
+    inst = instrument if instrument is not None else (s.get("default_inst") or None)
+    if inst:
+        r = _cli("change_instrument", {"name": inst}, timeout=120)
+        out["steps"].append(r.to_dict()); _note(r, f"악기 → {inst}")
         if not r.ok:
             out["ok"] = False
             return out
     r = _cli("play_music_score", {"title": title}, timeout=660)
-    out["steps"].append(r.to_dict())
+    out["steps"].append(r.to_dict()); _note(r, f"재생 · {title}")
     out["ok"] = r.ok
+    if r.ok:
+        _last_play.update({"title": title, "inst": inst or ""})
+        store.push_recent(title, inst or "")
     return out
 
 
@@ -235,7 +288,7 @@ def stop() -> dict:
         return out
     for attempt in range(4):
         r = _cli("stop_action", timeout=60)
-        out["steps"].append(r.to_dict())
+        out["steps"].append(r.to_dict()); _note(r, "정지")
         if r.ok:
             out["ok"] = True
             return out
@@ -261,7 +314,12 @@ class H(SimpleHTTPRequestHandler):
                                 "instruments": {"fetched_at": ins["fetched_at"], "count": len(ins["items"])}})
         if u.path == "/api/scores":
             items = lib.build(store.get_cache("scores")["items"], store.get_artists())
+            dur = store.get_durations(); rec = {x["title"]: x["ts"] for x in store.get_recent()}
+            for it in items:
+                it["duration"] = dur.get(it["title"]); it["lastPlayed"] = rec.get(it["title"])
             found = lib.search(items, q.get("q", ""))
+            if q.get("view") == "recent":
+                found = sorted([it for it in found if it["lastPlayed"]], key=lambda it: -it["lastPlayed"])
             if q.get("initial"):
                 found = [it for it in found if it["initial"] == q["initial"]]
             if q.get("artist"):                       # artistKey (수동 id 또는 'auto:…')
@@ -283,7 +341,11 @@ class H(SimpleHTTPRequestHandler):
         if u.path == "/api/playlists":
             return _json(self, store.get_lists())
         if u.path == "/api/activity":
-            return _json(self, _cli("get_activity", timeout=30).to_dict())
+            return _json(self, _activity())
+        if u.path == "/api/log":
+            return _json(self, {"items": _log[:40]})
+        if u.path == "/api/settings":
+            return _json(self, {"settings": store.get_settings(), "cli": cli.probe()})
         if u.path.startswith("/api/cli/"):
             # 읽기 전용 명령 디버그 통로 (필드 모양 확인용). 실행 명령은 막는다.
             command = u.path[len("/api/cli/"):]
@@ -307,6 +369,10 @@ class H(SimpleHTTPRequestHandler):
             return _json(self, lists_op(str(p.get("op", "")), p))
         if u.path == "/api/artists":
             return _json(self, artists_op(str(p.get("op", "")), p))
+        if u.path == "/api/settings":
+            s = store.set_settings(p.get("settings") or {})
+            cli.set_exe_override(s.get("cli_exe"))
+            return _json(self, {"ok": True, "settings": s, "cli": cli.probe()})
         return _json(self, {"ok": False, "error": "not_found"}, 404)
 
 

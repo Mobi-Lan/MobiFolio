@@ -27,8 +27,18 @@ LOCAL_COMMANDS = {"status", "capabilities"}      # 게임까지 안 가는 명�
 EXIT_MEANING = {0: "ok", 2: "usage_error", 3: "canceled", 4: "unknown_command", 5: "disconnected"}
 
 
+_override: str = ""   # 설정(data/settings.json)의 cli_exe — server 가 set_exe_override 로 넣는다
+
+
+def set_exe_override(path: str | None) -> None:
+    global _override
+    _override = (path or "").strip()
+
+
 def find_exe() -> str | None:
-    """존재하는 실행파일 경로. PATH 항목은 where 로 확인."""
+    """존재하는 실행파일 경로. 설정 지정 > 기본 설치 경로 > PATH(where)."""
+    if _override and os.path.exists(_override):
+        return _override
     for c in EXE_CANDIDATES:
         if not c:
             continue

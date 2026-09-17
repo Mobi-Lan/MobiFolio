@@ -52,13 +52,71 @@ def set_cache(kind: str, items: list) -> dict:
     return d
 
 
+# ── 설정 ──
+DEFAULT_SETTINGS = {
+    "cli_exe": "",            # 비우면 자동 탐색 (C:\Nexon\MabinogiMobile\MabinogiMobile_CLI.exe → PATH)
+    "gap_sec": 2,             # 곡 사이 대기(초)
+    "advance_margin": 2.0,    # 곡 끝 몇 초 전에 정지하고 다음 곡으로 (연주가 반복 설정이라 스스로 안 끝날 수 있음)
+    "default_inst": "",       # 기본 악기 ("" = 악기 그대로)
+    "auto_sync": True,        # 시작 시 CLI 연결돼 있으면 자동 갱신
+    "stop_before_play": True, # 재생 전 현재 연주를 먼저 정지
+}
+
+
+def get_settings() -> dict:
+    d = dict(DEFAULT_SETTINGS)
+    d.update({k: v for k, v in (load("settings.json", {}) or {}).items() if k in DEFAULT_SETTINGS})
+    return d
+
+
+def set_settings(patch: dict) -> dict:
+    d = get_settings()
+    for k, v in (patch or {}).items():
+        if k in DEFAULT_SETTINGS:
+            d[k] = v
+    save("settings.json", d)
+    return d
+
+
+# ── 최근 재생 · 곡 길이 캐시 ──
+def get_recent() -> list:
+    return load("recent.json", [])
+
+
+def push_recent(title: str, inst: str = "") -> None:
+    r = [x for x in get_recent() if x.get("title") != title]
+    r.insert(0, {"title": title, "inst": inst, "ts": time.time()})
+    save("recent.json", r[:100])
+
+
+def get_durations() -> dict:
+    return load("durations.json", {})
+
+
+def set_duration(title: str, seconds: float) -> None:
+    d = get_durations()
+    if title and seconds and seconds > 0 and abs(d.get(title, 0) - seconds) > 0.5:
+        d[title] = round(float(seconds), 2)
+        save("durations.json", d)
+
+
 # ── 재생목록·폴더 ──
+def _norm_item(x) -> dict:
+    """항목 = {"title": DisplayTitle, "inst": 악기명|""}. 예전 문자열 항목도 받아준다."""
+    if isinstance(x, str):
+        return {"title": x, "inst": ""}
+    return {"title": str(x.get("title", "")), "inst": str(x.get("inst", "") or "")}
+
+
 def get_lists() -> dict:
     d = load("playlists.json", None)
     if not d:
         d = {"folders": [], "playlists": []}
     d.setdefault("folders", [])
     d.setdefault("playlists", [])
+    for pl in d["playlists"]:
+        pl["items"] = [_norm_item(x) for x in pl.get("items", []) if _norm_item(x)["title"]]
+        pl.setdefault("memo", "")
     return d
 
 
