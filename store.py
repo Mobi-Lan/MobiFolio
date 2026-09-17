@@ -16,14 +16,14 @@ import threading
 import time
 import uuid
 
-# 데이터 위치: MABI_DATA_DIR(개발·테스트용 강제) > 사용자 폴더 %LOCALAPPDATA%\MabiScoreBox (배포판·개발 실행이 같은 저장소를 쓴다)
+# 데이터 위치: MABI_DATA_DIR(개발·테스트용 강제) > 사용자 폴더 %LOCALAPPDATA%\MobiFolio (배포판·개발 실행이 같은 저장소를 쓴다)
 def user_base() -> str:
     env = os.environ.get("MABI_DATA_DIR")
     if env:
         return env
     la = os.environ.get("LOCALAPPDATA")
     if la:
-        return os.path.join(la, "MabiScoreBox")
+        return os.path.join(la, "MobiFolio")
     return os.path.dirname(sys.executable) if getattr(sys, "frozen", False) else os.path.dirname(os.path.abspath(__file__))
 
 

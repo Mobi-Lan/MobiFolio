@@ -20,13 +20,13 @@ from urllib.parse import parse_qs, urlparse
 
 FROZEN = bool(getattr(sys, "frozen", False))
 HERE = os.path.dirname(os.path.abspath(__file__))
-BASE = os.environ.get("MABI_DATA_DIR") or (os.path.join(os.environ["LOCALAPPDATA"], "MabiScoreBox") if os.environ.get("LOCALAPPDATA")
+BASE = os.environ.get("MABI_DATA_DIR") or (os.path.join(os.environ["LOCALAPPDATA"], "MobiFolio") if os.environ.get("LOCALAPPDATA")
                                            else (os.path.dirname(sys.executable) if FROZEN else HERE))   # 데이터·로그 위치 (store.user_base 와 같은 규칙)
 os.makedirs(BASE, exist_ok=True)
 RES = getattr(sys, "_MEIPASS", HERE)                               # 묶인 리소스(ui/) 위치
 if FROZEN:
     # --noconsole 이면 stdout 이 없다 → 로그를 exe 옆 파일로
-    _logp = os.path.join(BASE, "mabi-scorebox.log")
+    _logp = os.path.join(BASE, "mobifolio.log")
     try:
         if os.path.getsize(_logp) > 2_000_000:   # 무한 성장 방지: 2MB 넘으면 새로 시작
             os.remove(_logp)
@@ -35,7 +35,7 @@ if FROZEN:
     try:
         _logf = open(_logp, "a", encoding="utf-8", buffering=1)
     except OSError:   # exe 옆에 쓸 수 없으면(읽기 전용 폴더 등) 임시 폴더로
-        _logf = open(os.path.join(os.environ.get("TEMP", "."), "mabi-scorebox.log"), "a", encoding="utf-8", buffering=1)
+        _logf = open(os.path.join(os.environ.get("TEMP", "."), "mobifolio.log"), "a", encoding="utf-8", buffering=1)
     sys.stdout = sys.stderr = _logf
 elif sys.stdout:
     sys.stdout.reconfigure(encoding="utf-8")
@@ -45,7 +45,8 @@ import library as lib         # noqa: E402
 import store                  # noqa: E402
 
 # 예전 위치(일렉트론이 넘긴 앱 폴더, exe 옆, 프로젝트 폴더)의 data/ 를 사용자 폴더로 한 번 옮긴다
-store.migrate_legacy([os.environ.get("MABI_LEGACY_DIR"), os.path.dirname(sys.executable) if FROZEN else None,
+store.migrate_legacy([os.path.join(os.environ["LOCALAPPDATA"], "MabiScoreBox") if os.environ.get("LOCALAPPDATA") else None,   # 이전 이름(악보함) 시절 사용자 폴더
+                      os.environ.get("MABI_LEGACY_DIR"), os.path.dirname(sys.executable) if FROZEN else None,
                       os.path.dirname(os.path.dirname(sys.executable)) if FROZEN else None,   # 패키지: resources\.. = 앱 폴더
                       HERE if not FROZEN else None])
 
@@ -431,8 +432,8 @@ class H(SimpleHTTPRequestHandler):
     def do_GET(self):
         u = urlparse(self.path)
         q = {k: v[0] for k, v in parse_qs(u.query).items()}
-        if u.path == "/api/health":   # 일렉트론 셸이 "이 포트가 정말 악보함인지" 확인하는 용도
-            return _json(self, {"app": "scorebox", "version": VERSION, "pid": os.getpid(), "data_dir": store.DATA_DIR, "frozen": FROZEN})
+        if u.path == "/api/health":   # 일렉트론 셸이 "이 포트가 정말 모비폴리오인지" 확인하는 용도
+            return _json(self, {"app": "mobifolio", "version": VERSION, "pid": os.getpid(), "data_dir": store.DATA_DIR, "frozen": FROZEN})
         if u.path == "/api/state":
             sc, ins = store.get_cache("scores"), store.get_cache("instruments")
             return _json(self, {"cli": _probe(), "scores": {"fetched_at": sc["fetched_at"], "count": len(sc["items"])},
@@ -494,7 +495,7 @@ class H(SimpleHTTPRequestHandler):
             return False
         if origin and origin not in (f"http://127.0.0.1:{PORT}", f"http://localhost:{PORT}"):
             return False
-        return self.headers.get("X-Requested-With") == "scorebox"
+        return self.headers.get("X-Requested-With") == "mobifolio"
 
     def do_POST(self):
         try:
@@ -610,12 +611,12 @@ def main() -> None:
     except OSError as e:
         if e.errno in (errno.EADDRINUSE, 10048):
             # 이미 떠 있음(포트 사용 중) → 창만 다시 연다
-            print(f"[mabi-playlist] port {PORT} busy — opening browser only", flush=True)
+            print(f"[mobifolio] port {PORT} busy — opening browser only", flush=True)
             _open_browser(); time.sleep(1.5)
             return
-        print(f"[mabi-playlist] port {PORT} bind failed: {e} (errno {e.errno}) — 예약 포트(Hyper-V/WinNAT)일 수 있습니다", flush=True)
+        print(f"[mobifolio] port {PORT} bind failed: {e} (errno {e.errno}) — 예약 포트(Hyper-V/WinNAT)일 수 있습니다", flush=True)
         sys.exit(1)
-    print(f"[mabi-playlist] http://127.0.0.1:{PORT}  cli={cli.find_exe()}  frozen={FROZEN}", flush=True)
+    print(f"[mobifolio] http://127.0.0.1:{PORT}  cli={cli.find_exe()}  frozen={FROZEN}", flush=True)
     _watch_parent()
     _open_browser()
     try:

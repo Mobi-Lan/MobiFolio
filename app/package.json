@@ -1,13 +1,13 @@
 {
-  "name": "mabi-scorebox",
-  "productName": "악보함",
+  "name": "mobifolio",
+  "productName": "모비폴리오",
   "version": "0.1.0",
-  "description": "마비노기 모바일 악보함 — 내 악기·악보 재생목록",
+  "description": "MobiFolio — MABINOGI MOBILE 팬 프로젝트: 내 악기·악보 재생목록",
   "main": "main.js",
   "private": true,
   "scripts": {
     "start": "electron .",
-    "package": "electron-packager . ScoreBox --platform=win32 --arch=x64 --out=../dist-electron --overwrite --extra-resource=../MabiScoreBox.exe --ignore=node_modules/.cache"
+    "package": "electron-packager . MobiFolio --platform=win32 --arch=x64 --out=../dist-electron --overwrite --extra-resource=../MobiFolioCore.exe --ignore=node_modules/.cache"
   },
   "devDependencies": {
     "@electron/packager": "^20.3.0",

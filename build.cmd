@@ -1,19 +1,19 @@
 @echo off
-rem Build: 1) Python backend -> MabiScoreBox.exe  2) Electron shell -> dist-electron\<app>\  (ASCII only)
-rem User data lives in %LOCALAPPDATA%\MabiScoreBox (not inside dist-electron), so packaging never touches it.
+rem Build: 1) Python backend -> MobiFolioCore.exe  2) Electron shell -> dist-electron\<app>\  (ASCII only)
+rem User data lives in %LOCALAPPDATA%\MobiFolio (not inside dist-electron), so packaging never touches it.
 rem Usage: build.cmd [--nopause]
 chcp 65001 >nul
 set PYTHONUTF8=1
 cd /d "%~dp0"
 set "NOPAUSE="
 if /i "%~1"=="--nopause" set "NOPAUSE=1"
-tasklist /fi "imagename eq MabiScoreBox.exe" 2>nul | find /i "MabiScoreBox.exe" >nul
-if not errorlevel 1 ( echo CLOSE THE APP FIRST: MabiScoreBox.exe is running & goto :fail )
+tasklist /fi "imagename eq MobiFolioCore.exe" 2>nul | find /i "MobiFolioCore.exe" >nul
+if not errorlevel 1 ( echo CLOSE THE APP FIRST: MobiFolioCore.exe is running & goto :fail )
 python -m pip install --quiet --disable-pip-version-check pyinstaller
-python -m PyInstaller --noconfirm --clean --onefile --noconsole --name MabiScoreBox --add-data "ui;ui" server.py
+python -m PyInstaller --noconfirm --clean --onefile --noconsole --name MobiFolioCore --add-data "ui;ui" server.py
 if errorlevel 1 ( echo BACKEND BUILD FAILED & goto :fail )
-copy /y dist\MabiScoreBox.exe MabiScoreBox.exe >nul
-if errorlevel 1 ( echo COPY FAILED: MabiScoreBox.exe is locked? & goto :fail )
+copy /y dist\MobiFolioCore.exe MobiFolioCore.exe >nul
+if errorlevel 1 ( echo COPY FAILED: MobiFolioCore.exe is locked? & goto :fail )
 cd app
 if not exist node_modules ( call npm install --no-audit --no-fund )
 call npm run package

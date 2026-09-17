@@ -1,4 +1,4 @@
-// 악보함 일렉트론 셸 — 파이썬 백엔드(MabiScoreBox.exe 또는 server.py)를 띄우고 그 UI 를 창에 연다.
+// 모비폴리오(MobiFolio) 일렉트론 셸 — 파이썬 백엔드(MobiFolioCore.exe 또는 server.py)를 띄우고 그 UI 를 창에 연다.
 // 창을 닫으면 백엔드도 같이 끝낸다 (정상 종료 요청 → 안 되면 강제). 데이터는 앱 폴더의 data/ 에 둔다.
 const { app, BrowserWindow, shell, dialog } = require("electron");
 const { spawn, spawnSync } = require("child_process");
@@ -9,9 +9,9 @@ const http = require("http");
 
 const PORT = 19997;
 const DEV = !app.isPackaged;
-// 앱 폴더: 패키지면 악보함.exe 옆, 개발이면 프로젝트 루트. 데이터·로그는 사용자 폴더 %LOCALAPPDATA%\MabiScoreBox (백엔드와 같은 규칙)
+// 앱 폴더: 패키지면 MobiFolio.exe 옆, 개발이면 프로젝트 루트. 데이터·로그는 사용자 폴더 %LOCALAPPDATA%\MobiFolio (백엔드와 같은 규칙)
 const APP_DIR = DEV ? path.join(__dirname, "..") : path.dirname(process.execPath);
-const DATA_BASE = process.env.MABI_DATA_DIR || (process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, "MabiScoreBox") : APP_DIR);
+const DATA_BASE = process.env.MABI_DATA_DIR || (process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, "MobiFolio") : APP_DIR);
 try { fs.mkdirSync(DATA_BASE, { recursive: true }); } catch {}
 const LOG = path.join(DATA_BASE, "electron.log");
 let backend = null;   // 우리가 띄운 백엔드 프로세스
@@ -30,8 +30,8 @@ app.on("second-instance", () => { if (win) { if (win.isMinimized()) win.restore(
 
 function backendExe() {
   const cands = [
-    path.join(process.resourcesPath || "", "MabiScoreBox.exe"),   // 패키지: resources/ 에 동봉
-    path.join(APP_DIR, "MabiScoreBox.exe"),                        // 개발: 프로젝트 루트
+    path.join(process.resourcesPath || "", "MobiFolioCore.exe"),   // 패키지: resources/ 에 동봉
+    path.join(APP_DIR, "MobiFolioCore.exe"),                        // 개발: 프로젝트 루트
   ];
   return cands.find((p) => fs.existsSync(p)) || null;
 }
@@ -49,7 +49,7 @@ function portOpen() {
 function req(method, p, timeout = 1500) {
   return new Promise((resolve) => {
     const r = http.request({ host: "127.0.0.1", port: PORT, path: p, method, timeout,
-      headers: method === "POST" ? { "Content-Type": "application/json", "Content-Length": 2, "X-Requested-With": "scorebox" } : { "X-Requested-With": "scorebox" } }, (res) => {
+      headers: method === "POST" ? { "Content-Type": "application/json", "Content-Length": 2, "X-Requested-With": "mobifolio" } : { "X-Requested-With": "mobifolio" } }, (res) => {
       const bufs = []; res.on("data", (b) => bufs.push(b));
       res.on("end", () => { try { resolve(JSON.parse(Buffer.concat(bufs).toString("utf8"))); } catch { resolve(null); } });
     });
@@ -74,12 +74,12 @@ function fatal(title, msg) {
 
 async function startBackend() {
   if (await portOpen()) {
-    // 누가 포트를 쓰고 있나? 악보함 백엔드가 아니면 못 붙는다
+    // 누가 포트를 쓰고 있나? 모비폴리오 백엔드가 아니면 못 붙는다
     const h = await req("GET", "/api/health");
-    if (!h || h.app !== "scorebox") return fatal("포트 사용 중", `127.0.0.1:${PORT} 를 다른 프로그램이 쓰고 있어 악보함을 열 수 없습니다.`);
-    if (DEV) { log("[scorebox] attaching to running backend (dev)", h.pid); return; }
+    if (!h || h.app !== "mobifolio") return fatal("포트 사용 중", `127.0.0.1:${PORT} 를 다른 프로그램이 쓰고 있어 모비폴리오를 열 수 없습니다.`);
+    if (DEV) { log("[mobifolio] attaching to running backend (dev)", h.pid); return; }
     // 이전 실행이 남긴 백엔드 → 정상 종료시키고 새로 띄운다 (빌드·데이터 위치가 다를 수 있으므로)
-    log("[scorebox] stale backend found, asking it to quit", h.pid, h.data_dir);
+    log("[mobifolio] stale backend found, asking it to quit", h.pid, h.data_dir);
     await req("POST", "/api/quit");
     if (!(await waitPort(false, 25))) {
       try { spawnSync("taskkill", ["/PID", String(h.pid), "/T", "/F"], { windowsHide: true, stdio: "ignore" }); } catch {}
@@ -94,11 +94,11 @@ async function startBackend() {
   try {
     backend = exe ? spawn(exe, [], opts) : spawn("python", [path.join(APP_DIR, "server.py")], opts);
   } catch (e) { return fatal("백엔드 실행 실패", String(e)); }
-  log("[scorebox] backend:", exe || "python server.py", "pid", backend.pid);
-  backend.on("error", (e) => { log("[scorebox] backend spawn error", e); backend = null; fatal("백엔드 실행 실패", exe ? String(e) : "python 을 찾지 못했습니다. " + String(e)); });
-  backend.on("exit", (code) => { log("[scorebox] backend exited", code); backend = null; });
+  log("[mobifolio] backend:", exe || "python server.py", "pid", backend.pid);
+  backend.on("error", (e) => { log("[mobifolio] backend spawn error", e); backend = null; fatal("백엔드 실행 실패", exe ? String(e) : "python 을 찾지 못했습니다. " + String(e)); });
+  backend.on("exit", (code) => { log("[mobifolio] backend exited", code); backend = null; });
   if (!(await waitPort(true, 60))) {   // 최대 12초
-    return fatal("백엔드 시작 실패", `12초 안에 백엔드가 준비되지 않았습니다.\n${DATA_BASE}\\mabi-scorebox.log 를 확인하세요.`);
+    return fatal("백엔드 시작 실패", `12초 안에 백엔드가 준비되지 않았습니다.\n${DATA_BASE}\\mobifolio.log 를 확인하세요.`);
   }
 }
 
@@ -117,14 +117,14 @@ async function stopBackend() {
 function createWindow() {
   win = new BrowserWindow({
     width: 1280, height: 860, minWidth: 960, minHeight: 600,
-    title: "악보함", backgroundColor: "#101114", autoHideMenuBar: true, show: false,
+    title: "모비폴리오", backgroundColor: "#101114", autoHideMenuBar: true, show: false,
     webPreferences: { contextIsolation: true, nodeIntegration: false },
   });
   win.once("ready-to-show", () => win.show());
   const isLocal = (u) => u.startsWith(`http://127.0.0.1:${PORT}`);
   win.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:/i.test(url)) shell.openExternal(url); return { action: "deny" }; });
   win.webContents.on("will-navigate", (e, url) => { if (!isLocal(url)) { e.preventDefault(); if (/^https?:/i.test(url)) shell.openExternal(url); } });
-  win.webContents.on("did-fail-load", (_e, code, desc) => { log("[scorebox] did-fail-load", code, desc); if (code !== -3) fatal("화면을 열지 못했습니다", `${desc} (${code})`); });
+  win.webContents.on("did-fail-load", (_e, code, desc) => { log("[mobifolio] did-fail-load", code, desc); if (code !== -3) fatal("화면을 열지 못했습니다", `${desc} (${code})`); });
   win.loadURL(`http://127.0.0.1:${PORT}`);
   win.on("closed", () => { win = null; });
 }

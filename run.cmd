@@ -1,5 +1,5 @@
 @echo off
-rem mabi-playlist dev launcher: the python backend opens its own app window (Edge/Chrome --app). ASCII only.
+rem MobiFolio dev launcher: the python backend opens its own app window (Edge/Chrome --app). ASCII only.
 chcp 65001 >nul
 set PYTHONUTF8=1
 set PYTHONIOENCODING=utf-8

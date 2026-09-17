@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>악보함</title>
+<title>모비폴리오</title>
 <style>
 :root{--bg:#101114;--panel:#0d1117;--panel2:#0b0f14;--card:#141a22;--card2:#182130;--line:#26303d;--line2:#1c2430;--ink:#e9ecf1;--ink2:#c9d0da;--strong:#f4e7c8;--muted:#9aa3b2;--faint:#6f7a8a;--faint2:#4b5665;--gold:#e2b866;--gold2:#c9a962;--golddim:#a8833f;--goldline:#6b5426;--green:#5fc7a4;--pink:#e88aa6;--blue:#7aa2e8;--ok:#4ade80;--mono:ui-monospace,Consolas,monospace;color-scheme:dark}
 *{box-sizing:border-box}
@@ -117,7 +117,7 @@ dialog{background:var(--card);color:var(--ink);border:1px solid var(--line);bord
 </defs></svg>
 
 <div class="top">
-  <div class="brand"><small>MABINOGI MOBILE</small><b>악보함</b></div>
+  <div class="brand"><small>MABINOGI MOBILE 팬 프로젝트</small><b>MobiFolio</b></div>
   <span class="grow"></span>
   <span class="status"><span class="dot" id="cliDot"></span><span id="cliText">CLI 확인 중</span></span>
   <span class="status" id="fetched">—</span>
@@ -177,7 +177,7 @@ dialog{background:var(--card);color:var(--ink);border:1px solid var(--line);bord
 
 <script>
 const $=(id)=>document.getElementById(id);
-const api=async(path,body)=>{try{const r=await fetch(path,{method:body?"POST":"GET",headers:{"Content-Type":"application/json","X-Requested-With":"scorebox"},body:body?JSON.stringify(body):undefined});const j=await r.json();if(j&&typeof j==="object"&&!("ok"in j)&&r.ok)return j;if(!r.ok&&j&&typeof j==="object"&&!("ok"in j))j.ok=false;return j;}catch(e){return {ok:false,error:"network",message:String(e.message||e)};}};
+const api=async(path,body)=>{try{const r=await fetch(path,{method:body?"POST":"GET",headers:{"Content-Type":"application/json","X-Requested-With":"mobifolio"},body:body?JSON.stringify(body):undefined});const j=await r.json();if(j&&typeof j==="object"&&!("ok"in j)&&r.ok)return j;if(!r.ok&&j&&typeof j==="object"&&!("ok"in j))j.ok=false;return j;}catch(e){return {ok:false,error:"network",message:String(e.message||e)};}};
 function toast(msg,ms=5000){const t=$("toast");t.textContent=msg;t.hidden=false;clearTimeout(t._t);t._t=setTimeout(()=>{t.hidden=true;},ms);}
 window.addEventListener("unhandledrejection",(e)=>{toast("오류: "+(e.reason&&e.reason.message||e.reason||"알 수 없음"));});
 window.addEventListener("error",(e)=>{toast("오류: "+(e.message||"알 수 없음"));});
