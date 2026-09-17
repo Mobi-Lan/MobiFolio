@@ -198,7 +198,11 @@ function ddMake(el,getItems,getVal,setVal){
   const close=()=>{list.hidden=true;btn.classList.remove("open");};
   const open=()=>{const items=getItems();list.innerHTML=items.map((it,k)=>`${it.sep?'<div class="dd-sep"></div>':""}<div class="dd-item ${getVal()===it.v?"on":""}" data-v="${esc(it.v)}"><svg class="ck"><use href="#ic-ck"/></svg><span class="nm">${esc(it.label)}</span>${it.eq?'<span class="badge eq">장착 중</span>':""}</div>`).join("");
     list.querySelectorAll(".dd-item").forEach((n)=>n.onclick=(ev)=>{ev.stopPropagation();setVal(n.dataset.v);label();close();});
-    const r=btn.getBoundingClientRect();list.style.left=r.left+"px";list.style.top=(r.bottom+6)+"px";list.style.width=Math.max(r.width,200)+"px";list.hidden=false;btn.classList.add("open");
+    const r=btn.getBoundingClientRect();list.style.left=r.left+"px";list.style.width=Math.max(r.width,200)+"px";list.style.visibility="hidden";list.hidden=false;
+    const h=list.offsetHeight,below=window.innerHeight-r.bottom-10,above=r.top-10;
+    if(h<=below||below>=above){list.style.top=(r.bottom+6)+"px";list.style.bottom="auto";list.style.maxHeight=Math.min(300,below)+"px";}   // 아래로
+    else{list.style.top="auto";list.style.bottom=(window.innerHeight-r.top+6)+"px";list.style.maxHeight=Math.min(300,above)+"px";}       // 공간 없으면 위로 (하단 재생 바)
+    list.style.visibility="";btn.classList.add("open");
     setTimeout(()=>document.addEventListener("click",function h(ev){if(!el.contains(ev.target)){close();}else if(!list.hidden)document.addEventListener("click",h,{once:true});},{once:true}),0);};
   btn.onclick=(ev)=>{ev.stopPropagation();list.hidden?open():close();};
   window.addEventListener("resize",close);document.addEventListener("keydown",(ev)=>{if(ev.key==="Escape")close();});
