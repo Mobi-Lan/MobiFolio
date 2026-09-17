@@ -141,7 +141,8 @@ function createWindow() {
   win = new BrowserWindow({
     width: 1280, height: 860, minWidth: 960, minHeight: 600,
     title: "모비폴리오", backgroundColor: "#101114", autoHideMenuBar: true, show: false, icon: path.join(__dirname, "icon", "MobiFolio.ico"),
-    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true, devTools: DEV },
+    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true, devTools: DEV,
+                      backgroundThrottling: false },   // 최소화해도 재생 감시(1초 폴링)·곡 전환 타이머가 늦춰지지 않게
   });
   win.once("ready-to-show", () => win.show());
   const isLocal = (u) => { try { return new URL(u).origin === origin(); } catch { return false; } };

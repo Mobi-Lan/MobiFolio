@@ -562,6 +562,27 @@ class H(SimpleHTTPRequestHandler):
             if not self._guard():   # CLI 를 실행시키는 GET 이라 출처 검사
                 return _json(self, {"ok": False, "error": "forbidden"}, 403)
             return _json(self, _activity())
+        if u.path == "/api/hold":   # 창이 살아 있는 동안 열어 두는 연결 (경량판 종료 판정). 5초마다 한 바이트를 보내 끊김을 감지
+            if not self._guard():
+                return _json(self, {"ok": False, "error": "forbidden"}, 403)
+            global _holds, _had_hold, _last_hold_close
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.send_header("X-Accel-Buffering", "no")
+            self.end_headers()
+            with _hold_lock:
+                _holds += 1; _had_hold = True
+            try:
+                while True:
+                    self.wfile.write(b".")
+                    self.wfile.flush()
+                    time.sleep(5.0)
+            except (OSError, ValueError):
+                pass
+            finally:
+                with _hold_lock:
+                    _holds -= 1; _last_hold_close = time.time()
+            return
         if u.path == "/api/log":
             if not self._guard():
                 return _json(self, {"ok": False, "error": "forbidden"}, 403)
@@ -734,7 +755,9 @@ def _launch_app_window(url: str):
     if exe:
         profile = os.path.join(BASE, ".appwindow-profile")
         args = [exe, f"--app={url}", "--window-size=1280,860", f"--user-data-dir={profile}",
-                "--no-first-run", "--no-default-browser-check", "--disable-extensions", "--disable-features=TranslateUI,msEdgeStartupBoost"]
+                "--no-first-run", "--no-default-browser-check", "--disable-extensions", "--disable-features=TranslateUI,msEdgeStartupBoost",
+                # 최소화·가림 상태에서도 페이지 타이머(재생 감시 1초 폴링)가 늦춰지지 않게
+                "--disable-background-timer-throttling", "--disable-backgrounding-occluded-windows", "--disable-renderer-backgrounding"]
         try:
             import subprocess
             return subprocess.Popen(args, creationflags=0x00000008)   # DETACHED_PROCESS
@@ -756,20 +779,31 @@ def _open_window() -> None:
         threading.Thread(target=_lite_watchdog, daemon=True).start()
 
 
-_last_ui = time.time()   # UI 가 마지막으로 요청한 시각 (경량판 종료 판정)
+_last_ui = time.time()   # UI 가 마지막으로 요청한 시각
 _bye_at = 0.0            # 페이지가 닫히며 보낸 신호 시각
+_start_at = time.time()
+_hold_lock = threading.Lock()
+_holds = 0               # 열려 있는 /api/hold 연결 수 (= 살아 있는 창 수)
+_had_hold = False
+_last_hold_close = 0.0
 
 
 def _lite_watchdog() -> None:
-    """경량판: 창이 닫히면 페이지가 /api/bye 를 보내고(2초 안에 다시 열리지 않으면 종료), 신호를 못 받아도 UI 요청이 25초 없으면 종료.
-    (Edge 는 실행 직후 프로세스를 갈아타서 프로세스 핸들로는 창 닫힘을 알 수 없다 — 그래서 페이지 쪽 신호를 쓴다)"""
+    """경량판 종료 판정 — 타이머가 아니라 '열린 연결'로 본다.
+    페이지는 /api/hold 연결을 계속 열어 두고, 창이 닫히거나 브라우저가 죽으면 그 연결이 끊긴다. 최소화해도 연결은 유지되므로
+    브라우저의 백그라운드 타이머 지연과 무관하다. 새로고침은 몇 초 안에 다시 연결되므로 4초의 여유를 둔다.
+    창이 90초 안에 한 번도 붙지 않으면(브라우저를 못 띄운 경우) 고아로 남지 않게 끝낸다."""
     while True:
         time.sleep(1.0)
         now = time.time()
-        if _bye_at and now - _bye_at > 2.0 and _last_ui <= _bye_at:
+        with _hold_lock:
+            h, had, lc = _holds, _had_hold, _last_hold_close
+        if had and h == 0 and now - lc > 4.0:
             print("[lite] window closed — exiting", flush=True); _shutdown()
-        if now - _last_ui > 25.0:
-            print("[lite] no UI heartbeat for 25s — exiting", flush=True); _shutdown()
+        if _bye_at and h == 0 and now - _bye_at > 4.0:
+            print("[lite] page said bye — exiting", flush=True); _shutdown()
+        if not had and now - _start_at > 90.0:
+            print("[lite] no window attached in 90s — exiting", flush=True); _shutdown()
 
 
 def _lite_single_instance() -> bool:
