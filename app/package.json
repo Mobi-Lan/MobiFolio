@@ -7,7 +7,7 @@
   "private": true,
   "scripts": {
     "start": "electron .",
-    "package": "electron-packager . 악보함 --platform=win32 --arch=x64 --out=../dist-electron --overwrite --extra-resource=../MabiScoreBox.exe --ignore=node_modules/.cache"
+    "package": "electron-packager . ScoreBox --platform=win32 --arch=x64 --out=../dist-electron --overwrite --extra-resource=../MabiScoreBox.exe --ignore=node_modules/.cache"
   },
   "devDependencies": {
     "@electron/packager": "^20.3.0",
