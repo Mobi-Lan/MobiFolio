@@ -85,7 +85,11 @@ svg.i.s{width:14px;height:14px;stroke-width:1.8}svg.i.l{width:20px;height:20px}
 .log .ts{font-family:var(--mono);font-size:10.5px;color:var(--muted)}.log .msg{font-size:12.5px;display:flex;flex-direction:column;gap:0;min-width:0}.log .msg small{font-size:10.5px;color:var(--muted);font-family:var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .log .st{font-size:10.5px;padding:2px 6px;border-radius:4px;font-weight:600;background:var(--line);color:var(--ink2)}.log.ok .st{background:var(--ok);color:#0a2a12}.log.warn .st{background:var(--pink);color:#2a0a12}
 .raw{font-family:var(--mono);font-size:11px;color:var(--muted);white-space:pre-wrap;background:var(--panel);border:1px solid var(--line2);border-radius:8px;padding:8px;max-height:200px;overflow:auto;word-break:break-all}
-.bulk{display:flex;align-items:center;gap:8px;padding:7px 10px;margin:0 0 8px;background:rgba(226,184,102,.08);border:1px solid var(--goldline);border-radius:9px;font-size:12.5px}
+.bulk{display:flex;align-items:center;gap:6px;padding:7px 10px;margin:0 0 8px;background:rgba(226,184,102,.08);border:1px solid var(--goldline);border-radius:9px;font-size:12.5px;color:var(--strong)}
+.bulk button{background:var(--card);border-color:#3a4756;color:var(--ink);font-weight:500}
+.bulk button:hover{background:var(--card2);border-color:var(--goldline);color:var(--strong)}
+.bulk button.pri{background:var(--gold);color:#1a1608;border-color:transparent;font-weight:600}
+.bulk button.ghost{background:var(--card);border-color:#3a4756;color:var(--ink2)}
 .plhead{display:flex;align-items:flex-start;gap:14px;padding:14px 14px 12px;border-bottom:1px solid var(--line2)}
 .plhead .tile{width:64px;height:64px;border-radius:12px}
 .plhead .name{font-size:20px;font-weight:700;color:var(--strong);line-height:1.2;cursor:text}
