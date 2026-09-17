@@ -64,7 +64,7 @@ svg.i.s{width:14px;height:14px;stroke-width:1.8}svg.i.l{width:20px;height:20px}
 .row .ttl b{display:flex;align-items:center;gap:0;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;min-width:0}
 .row .ttl b .tt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:0 1 auto}
 .row .ttl small{font-size:11.5px;color:var(--faint);font-family:var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;user-select:text}
-.row .art{font-size:12.5px;color:var(--ink2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row .art{font-size:12.5px;color:var(--ink2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:center;justify-self:stretch}
 .row .len{font-family:var(--mono);font-size:11.5px;color:var(--muted);text-align:right}
 .row .acts{display:flex;gap:5px}
 .row .grip{color:var(--faint2);cursor:grab}.row.dragging{opacity:.4}.row.over{box-shadow:inset 0 2px 0 var(--gold)}.row.over.after{box-shadow:inset 0 -2px 0 var(--gold)}
@@ -323,7 +323,7 @@ function renderMid(){
   $("qClear").onclick=()=>{S.q="";renderMid();};if($("btnBack"))$("btnBack").onclick=()=>setView({kind:"lib"});if($("btnArtMenu"))$("btnArtMenu").onclick=(e)=>artistMenu(e,v.key);
   }
   const st=$("mid").scrollTop;
-  $("mid").innerHTML=`<div class="row hd"><input type="checkbox" id="ckAll" ${allChecked(items)?"checked":""}><span>#</span><span>제목 · 파일명</span><span>아티스트</span><span style="text-align:right">길이</span><span></span></div>`+
+  $("mid").innerHTML=`<div class="row hd"><input type="checkbox" id="ckAll" ${allChecked(items)?"checked":""}><span>#</span><span>제목 · 파일명</span><span class="art">아티스트</span><span style="text-align:right">길이</span><span></span></div>`+
     (items.length?items.map((it,i)=>rowHtml(it,i)).join(""):`<div class="empty">${S.summary.count?"조건에 맞는 곡이 없습니다":"아직 수신한 악보가 없습니다 — 「갱신」을 누르세요"}</div>`);
   $("mid").scrollTop=st;
   bindRows(items);renderBulk(items);
@@ -384,7 +384,7 @@ function renderPlHead(pl,items){
   $("plExport").onclick=async()=>{const txt=JSON.stringify({name:pl.name,memo:pl.memo,items:pl.items},null,1);try{await navigator.clipboard.writeText(txt);alert("클립보드에 JSON으로 복사했습니다");}catch{prompt("복사:",txt);}};
 }
 function renderPlRows(pl,items){
-  $("mid").innerHTML=`<div class="row pl hd"><span></span><input type="checkbox" id="ckAll" ${allChecked(items)?"checked":""}><span>#</span><span>제목 · 파일명</span><span>아티스트</span><span>악기</span><span style="text-align:right">길이</span><span></span></div>`+
+  $("mid").innerHTML=`<div class="row pl hd"><span></span><input type="checkbox" id="ckAll" ${allChecked(items)?"checked":""}><span>#</span><span>제목 · 파일명</span><span class="art">아티스트</span><span>악기</span><span style="text-align:right">길이</span><span></span></div>`+
     (items.length?items.map((it,i)=>{const playing=S.now&&S.now.title===it.title&&S.playing;return `<div class="row pl ${S.sel===it.title?"sel":""}" draggable="true" data-t="${esc(it.title)}" data-i="${i}" title="더블클릭: 재생 · 핸들을 끌어 순서 변경"><span class="grip">${ICON("grip","s")}</span><input type="checkbox" data-ck="${esc(it.title)}" aria-label="선택" ${S.selected.has(it.title)?"checked":""}><span class="no" style="${playing?"color:var(--gold)":""}">${playing?"▶":i+1}</span>
       <div class="ttl"><b><span class="tt">${esc(it.song||it.cleaned)}</span>${playing?'<span class="badge play">재생 중</span>':""}${it.missing?'<span class="badge dup">악보 없음</span>':""}${it.dupExact>1?`<span class="badge dup">동명 ${it.dupExact}</span>`:""}</b><small>${esc(it.missing?"—":it.title)}</small></div>
       <span class="art">${esc(it.artist||"")}</span><div class="dd" data-inst-of="${esc(it.title)}"></div><span class="len">${it.duration?fmtSec(it.duration):""}</span>
