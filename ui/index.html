@@ -377,17 +377,17 @@ function qOrder(){return S.order.length?S.order:S.queue.map((_,i)=>i);}
 function qPos(){return qOrder().indexOf(S.qi);}
 function makeOrder(){const idx=S.queue.map((_,i)=>i);if(!S.shuffle){S.order=idx;return;}const cur=S.qi;const rest=idx.filter((i)=>i!==cur);for(let i=rest.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[rest[i],rest[j]]=[rest[j],rest[i]];}S.order=cur>=0?[cur,...rest]:rest;}
 async function playFrom(list,index,src){if(!list.length||index<0)return;S.queue=list.map((x)=>({title:x.title,inst:x.inst||""}));S.qi=index;S.src=src;makeOrder();await playIndex(index);}
-async function playIndex(i){clearTimeout(S.gapT);const it=S.queue[i];if(!it)return;S.qi=i;S.manualStop=false;S.advancing=false;
+async function playIndex(i){if(S.switching)return;clearTimeout(S.gapT);const it=S.queue[i];if(!it)return;S.switching=true;S.qi=i;S.manualStop=false;try{
   const lib=S.byTitle.get(it.title);S.now={title:it.title,inst:it.inst||S.instrument||"",song:lib?(lib.song||lib.cleaned):it.title,artist:lib?lib.artist:""};
   $("nowTitle").textContent=S.now.song;$("nowSub").textContent="전송 중…";$("prog").style.width="0%";$("tEl").textContent="0:00";$("tTot").textContent=(lib&&lib.duration)?fmtSec(lib.duration):"0:00";
   const r=await api("/api/play",{title:it.title,instrument:it.inst||S.instrument||null});
   S.playing=r.ok;S.startedAt=Date.now();
   if(!r.ok){$("nowSub").textContent="실패: "+(r.error||r.steps?.at(-1)?.error||"")+" "+(r.message||r.steps?.at(-1)?.message||"");loadLog();if(S.queue.length>1){S.gapT=setTimeout(()=>advance(1),1500);}return;}
-  setMain(true);startPoll();loadLog();renderMid();renderQueue();renderTree();}
+  setMain(true);startPoll();loadLog();renderMid();renderQueue();renderTree();}finally{S.switching=false;}}
 function setMain(playing){$("mainIcon").innerHTML=`<use href="#ic-${playing?"stop":"play"}"/>`;$("nowBadge").hidden=!playing;}
 function startPoll(){clearInterval(S.pollT);S.pollT=setInterval(pollAct,1000);}
-async function advance(dir){ // dir=+1 다음, -1 이전
-  if(S.advancing)return;S.advancing=true;const ord=qOrder();let pos=ord.indexOf(S.qi);
+async function advance(dir){ // dir=+1 다음, -1 이전, 0 자동(다음)
+  if(S.advancing||S.switching)return;S.advancing=true;clearTimeout(S.gapT);const ord=qOrder();let pos=ord.indexOf(S.qi);
   if(S.repeat==="one"&&dir===0){await playIndex(S.qi);S.advancing=false;return;}
   pos+=dir===0?1:dir;
   if(pos>=ord.length){if(S.repeat==="all"){pos=0;}else{await stopAll("재생목록 끝");S.advancing=false;return;}}
@@ -395,18 +395,19 @@ async function advance(dir){ // dir=+1 다음, -1 이전
   await playIndex(ord[pos]);S.advancing=false;}
 async function stopAll(msg){clearInterval(S.pollT);clearTimeout(S.gapT);S.playing=false;setMain(false);$("nowSub").textContent=msg||"대기";$("prog").style.width="0%";renderMid();renderQueue();renderTree();}
 async function pollAct(){
-  const a=await api("/api/activity");const p=(a.body||{}).Performance||{};const s=S.settings;
+  if(S.switching)return;
+  const a=await api("/api/activity");if(S.switching)return;const p=(a.body||{}).Performance||{};const s=S.settings;const sinceStart=(Date.now()-S.startedAt)/1000;
   if(p.IsPlaying){const tot=p.TotalDurationSeconds||0,el=p.ElapsedSeconds||0,localEl=(Date.now()-S.startedAt)/1000;
     $("nowSub").textContent=`${p.MusicTitle||S.now?.song||""} · ${p.InstrumentName||""}${p.IsLoop?" · 반복 설정":""}${S.src.startsWith("pl:")?` · ${qPos()+1}/${S.queue.length}`:""}`;
     $("tEl").textContent=fmtSec(el);$("tTot").textContent=fmtSec(tot);$("prog").style.width=(tot?Math.min(100,el/tot*100):0)+"%";
     if(S.playing&&tot&&!S.advancing&&((tot-el)<=(s.advance_margin??2)||localEl>=tot-1)){
       await api("/api/stop",{});S.playing=false;const gap=(s.gap_sec??2)*1000;$("nowSub").textContent=`다음 곡까지 ${s.gap_sec??2}초…`;clearTimeout(S.gapT);S.gapT=setTimeout(()=>advance(0),gap);}
-  }else if(S.playing){S.playing=false;if(S.manualStop){stopAll("정지됨");return;}
+  }else if(S.playing){if(sinceStart<2.5)return;S.playing=false;if(S.manualStop){stopAll("정지됨");return;}
     const gap=(s.gap_sec??2)*1000;$("nowSub").textContent=S.queue.length>1||S.repeat!=="off"?`연주 종료 · ${s.gap_sec??2}초 후 다음`:"연주 종료";clearTimeout(S.gapT);S.gapT=setTimeout(()=>advance(0),gap);}
 }
 $("btnMain").onclick=async()=>{if(S.playing){S.manualStop=true;clearTimeout(S.gapT);const r=await api("/api/stop",{});loadLog();await stopAll(r.ok?"정지됨":"정지 실패 — 잠시 후 다시");}else if(S.qi>=0&&S.queue[S.qi]){await playIndex(S.qi);}else if(S.sel){playFrom([{title:S.sel,inst:""}],0,"single");}};
-$("btnNext").onclick=()=>{if(!S.queue.length)return;clearTimeout(S.gapT);advance(1);};
-$("btnPrev").onclick=async()=>{if(!S.queue.length)return;clearTimeout(S.gapT);const el=(Date.now()-S.startedAt)/1000;if(S.playing&&el>4){await playIndex(S.qi);}else advance(-1);};
+$("btnNext").onclick=()=>{if(!S.queue.length||S.switching||S.advancing)return;clearTimeout(S.gapT);advance(1);};
+$("btnPrev").onclick=async()=>{if(!S.queue.length||S.switching||S.advancing)return;clearTimeout(S.gapT);const el=(Date.now()-S.startedAt)/1000;if(S.playing&&el>4){await playIndex(S.qi);}else advance(-1);};
 function toggleShuffle(){S.shuffle=!S.shuffle;makeOrder();$("btnShuffle").classList.toggle("on",S.shuffle);renderQueue();if(S.view.kind==="pl")renderMid();}
 function cycleRepeat(){S.repeat=S.repeat==="off"?"all":S.repeat==="all"?"one":"off";$("btnRepeat").classList.toggle("on",S.repeat!=="off");$("rep1").hidden=S.repeat!=="one";$("btnRepeat").title="반복: "+{off:"끔",all:"전체",one:"한 곡"}[S.repeat];renderQueue();if(S.view.kind==="pl")renderMid();}
 $("btnShuffle").onclick=toggleShuffle;$("btnRepeat").onclick=cycleRepeat;
@@ -417,7 +418,7 @@ function renderQueue(){const ord=qOrder(),pos=qPos();const up=ord.slice(pos+1).m
   const now=S.queue[S.qi];const lib=(t)=>S.byTitle.get(t)||{};
   $("queueBody").innerHTML=(now?`<div style="padding:9px 11px;border-radius:9px;border:1px solid var(--goldline);background:rgba(226,184,102,.08);margin-bottom:6px"><div style="font-size:11px;color:var(--gold);letter-spacing:.08em">${S.playing?"재생 중":"현재"}</div><div style="font-weight:700;color:var(--strong)">${esc(lib(now.title).song||now.title)}</div><div style="font-size:11.5px;color:var(--ink2)">${esc(lib(now.title).artist||"")}${now.inst?" · "+esc(now.inst):" · 악기 그대로"}</div></div>`:"")+
     (up.length?up.slice(0,30).map((it,k)=>`<div style="display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:center;padding:6px 9px;border-radius:8px;border:1px solid var(--line2);margin-bottom:4px;cursor:pointer" data-qj="${ord[pos+1+k]}"><span class="num" style="font-size:11px;color:var(--faint);width:16px">${k+1}</span><div style="min-width:0"><div style="font-size:12.5px;color:var(--ink);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(lib(it.title).song||it.title)}</div><div style="font-size:11px;color:var(--muted)">${esc(lib(it.title).artist||"")}${it.inst?" · "+esc(it.inst):""}</div></div><span class="num" style="font-size:11px;color:var(--muted)">${lib(it.title).duration?fmtSec(lib(it.title).duration):""}</span></div>`).join("")+(up.length>30?`<div class="note" style="text-align:center">+ ${up.length-30}곡</div>`:""):`<div class="note" style="padding:4px 2px">다음 곡 없음</div>`);
-  $("queueBody").querySelectorAll("[data-qj]").forEach((n)=>n.onclick=()=>{clearTimeout(S.gapT);playIndex(Number(n.dataset.qj));});}
+  $("queueBody").querySelectorAll("[data-qj]").forEach((n)=>n.onclick=()=>{if(S.switching)return;clearTimeout(S.gapT);playIndex(Number(n.dataset.qj));});}
 
 /* ── CLI 로그 ── */
 function renderLog(){const L=S.logs||[];$("logMeta").textContent=L.length?`최근 ${Math.min(L.length,40)}건`:"";
