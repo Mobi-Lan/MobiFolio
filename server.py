@@ -258,7 +258,7 @@ class H(SimpleHTTPRequestHandler):
             # 정규화 검토용: 제목 → 정리·분리·규칙 을 전부 보여 준다
             items = lib.build(store.get_cache("scores")["items"], store.get_artists())
             return _json(self, {"summary": lib.summary(items),
-                                "rows": [{k: it[k] for k in ("title", "cleaned", "removed", "artist", "song", "rule", "bucket")} for it in items]})
+                                "rows": [{k: it[k] for k in ("title", "cleaned", "removed", "tags", "variant", "artist", "song", "rule", "bucket")} for it in items]})
         if u.path == "/api/instruments":
             return _json(self, {"items": lib.build_instruments(store.get_cache("instruments")["items"])})
         if u.path == "/api/playlists":

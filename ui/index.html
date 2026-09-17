@@ -8,7 +8,7 @@
 :root{--bg:#101114;--panel:#0d1117;--card:#141a22;--card2:#182130;--line:#26303d;--line2:#1c2430;--ink:#e9ecf1;--ink2:#c9d0da;--strong:#f4e7c8;--muted:#9aa3b2;--faint:#6f7a8a;--gold:#e2b866;--gold2:#c9a962;--goldline:#6b5426;--green:#5fc7a4;--pink:#e88aa6;--blue:#7aa2e8;--mono:ui-monospace,Consolas,monospace}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 "IBM Plex Sans KR","Pretendard","Malgun Gothic",system-ui,sans-serif}
-button{font:inherit;color:var(--ink2);background:transparent;border:1px solid var(--line);border-radius:8px;padding:6px 11px;cursor:pointer}
+button{font:inherit;color:var(--ink2);background:transparent;border:1px solid var(--line);border-radius:8px;padding:6px 11px;cursor:pointer;white-space:nowrap}
 button:hover{background:var(--card2);color:var(--strong)}
 button.pri{background:var(--gold);color:#1a1608;border-color:transparent;font-weight:600}
 button.pri:hover{background:#efc879}
@@ -17,45 +17,52 @@ button.small{padding:3px 8px;font-size:12px;border-radius:6px}
 button:disabled{opacity:.45;cursor:default}
 input,select{font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px 10px}
 input:focus,select:focus{outline:none;border-color:var(--goldline)}
+input[type=checkbox]{width:15px;height:15px;accent-color:var(--gold)}
 .top{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--line2);background:var(--panel)}
 .brand{display:flex;flex-direction:column;line-height:1.05;margin-right:10px}
 .brand small{font-size:9.5px;letter-spacing:.16em;color:#a8833f}.brand b{font-size:16px}
 .grow{flex:1}
 .status{font-size:12.5px;color:var(--muted);display:inline-flex;align-items:center;gap:7px}
 .dot{width:7px;height:7px;border-radius:50%;background:var(--faint);display:inline-block}.dot.on{background:#4ade80;box-shadow:0 0 7px #4ade80}.dot.off{background:var(--pink)}
-.grid{display:grid;grid-template-columns:260px 1fr 300px;gap:12px;padding:12px 16px;height:calc(100vh - 54px)}
+.grid{display:grid;grid-template-columns:270px 1fr 300px;gap:12px;padding:12px 16px;height:calc(100vh - 54px)}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;display:flex;flex-direction:column;min-height:0;overflow:hidden}
 .chd{display:flex;align-items:center;gap:8px;padding:9px 13px;border-bottom:1px solid var(--line2);font-weight:600}
 .chd .m{font-size:12px;color:var(--muted);font-weight:400}
 .cbd{padding:10px 12px;overflow:auto;min-height:0;flex:1}
-.tree .folder,.tree .pl{display:flex;align-items:center;gap:6px;padding:5px 8px;border-radius:7px;cursor:pointer;font-size:13px}
-.tree .folder{color:var(--muted)}.tree .pl{color:var(--ink2)}
-.tree .pl.on,.tree .folder.on{background:var(--card2);color:var(--strong)}
+.sec{font-size:11px;letter-spacing:.12em;color:var(--gold2);margin:10px 0 4px;display:flex;align-items:center;gap:6px}
+.sec:first-child{margin-top:0}
+.tree .folder,.tree .pl,.tree .ar{display:flex;align-items:center;gap:6px;padding:5px 8px;border-radius:7px;cursor:pointer;font-size:13px}
+.tree .folder{color:var(--muted)}.tree .pl,.tree .ar{color:var(--ink2)}
+.tree .on{background:var(--card2);color:var(--strong)}
 .tree .sub{margin-left:14px;border-left:1px solid var(--line2);padding-left:6px}
 .tree .cnt{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--faint)}
+.tree .ar.auto{color:var(--muted)}
 .idx{display:flex;flex-wrap:wrap;gap:3px;margin:8px 0}
 .idx span{font-family:var(--mono);font-size:11.5px;padding:2px 6px;border-radius:5px;color:var(--muted);cursor:pointer;border:1px solid transparent}
 .idx span:hover{color:var(--ink2)}.idx span.on{background:var(--gold);color:#1a1608;font-weight:600}.idx span.zero{opacity:.35;cursor:default}
-.chips{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px}
-.chip{font-size:12px;padding:3px 9px;border-radius:7px;border:1px solid var(--line);color:var(--muted);cursor:pointer}
-.chip.on{border-color:var(--goldline);color:var(--strong);background:rgba(226,184,102,.1)}
-.row{display:grid;grid-template-columns:22px 1fr auto auto;gap:10px;align-items:center;padding:7px 8px;border-bottom:1px solid var(--line2);font-size:13px}
+.row{display:grid;grid-template-columns:22px 1fr auto;gap:10px;align-items:center;padding:6px 8px;border-bottom:1px solid var(--line2);font-size:13px}
+.row.sel{grid-template-columns:22px 22px 1fr auto}
 .row:hover{background:#1a2230}
 .row .n{font-family:var(--mono);font-size:11px;color:var(--faint)}
 .row .t{color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .row .t small{color:var(--muted);margin-left:6px}
+.row .t .orig{display:block;font-size:11px;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .badge{font-size:10.5px;padding:1px 6px;border-radius:5px;background:rgba(232,138,166,.14);color:var(--pink);margin-left:6px}
+.badge.tag{background:rgba(122,162,232,.14);color:var(--blue)}
+.badge.var{background:rgba(95,199,164,.14);color:var(--green)}
+.badge.rule{background:#0d1117;color:var(--faint);border:1px solid var(--line2)}
 .row .acts{display:flex;gap:4px}
 .note{font-size:12px;color:var(--muted);line-height:1.5}
 .now{border:1px solid var(--goldline);border-radius:12px;padding:14px;background:linear-gradient(180deg,#1b2231,#141a22)}
 .now .lbl{font-size:11px;letter-spacing:.14em;color:var(--gold2)}
-.now .title{font-size:17px;font-weight:600;color:var(--strong);margin:4px 0 8px;word-break:break-all}
-.log{font-family:var(--mono);font-size:11px;color:var(--muted);white-space:pre-wrap;max-height:180px;overflow:auto;background:var(--panel);border:1px solid var(--line2);border-radius:8px;padding:8px}
+.now .title{font-size:16px;font-weight:600;color:var(--strong);margin:4px 0 8px;word-break:break-all}
+.log{font-family:var(--mono);font-size:11px;color:var(--muted);white-space:pre-wrap;max-height:160px;overflow:auto;background:var(--panel);border:1px solid var(--line2);border-radius:8px;padding:8px}
 .empty{color:var(--faint);text-align:center;padding:20px}
-dialog{background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:12px;padding:16px;min-width:320px}
+.bulk{display:flex;align-items:center;gap:8px;padding:8px 10px;margin-bottom:8px;background:rgba(226,184,102,.08);border:1px solid var(--goldline);border-radius:9px;font-size:13px}
+dialog{background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:12px;padding:16px;min-width:340px}
 dialog::backdrop{background:rgba(0,0,0,.55)}
-.menu{position:absolute;background:var(--card);border:1px solid var(--line);border-radius:9px;padding:6px;z-index:9;min-width:180px;box-shadow:0 10px 30px rgba(0,0,0,.5)}
-.menu div{padding:6px 10px;border-radius:6px;cursor:pointer;font-size:13px}.menu div:hover{background:var(--card2)}
+.menu{position:absolute;background:var(--card);border:1px solid var(--line);border-radius:9px;padding:6px;z-index:9;min-width:200px;max-height:60vh;overflow:auto;box-shadow:0 10px 30px rgba(0,0,0,.5)}
+.menu div{padding:6px 10px;border-radius:6px;cursor:pointer;font-size:13px}.menu div:hover{background:var(--card2)}.menu .hd{color:var(--faint);font-size:11px;cursor:default}
 </style>
 </head>
 <body>
@@ -64,32 +71,31 @@ dialog::backdrop{background:rgba(0,0,0,.55)}
   <span class="status"><span class="dot" id="cliDot"></span><span id="cliText">CLI 확인 중</span></span>
   <span class="grow"></span>
   <span class="status" id="fetched">—</span>
+  <button class="small ghost" id="btnReport" title="정규화 결과 보고">정규화 보고</button>
   <button class="pri" id="btnSync">갱신</button>
 </div>
 
 <div class="grid">
-  <!-- 왼쪽: 폴더·재생목록 -->
   <div class="card">
-    <div class="chd">재생목록<span class="grow"></span><button class="small ghost" id="btnNewFolder" title="폴더 만들기">+ 폴더</button><button class="small" id="btnNewList">+ 목록</button></div>
+    <div class="chd">보관함<span class="grow"></span><button class="small ghost" id="btnNewFolder">+ 폴더</button><button class="small" id="btnNewList">+ 목록</button></div>
     <div class="cbd tree" id="tree"></div>
   </div>
 
-  <!-- 가운데: 라이브러리 / 재생목록 상세 -->
   <div class="card">
     <div class="chd"><span id="midTitle">내 악보</span><span class="m" id="midMeta"></span><span class="grow"></span>
       <button class="small ghost" id="btnBackLib" hidden>← 전체 악보</button>
+      <button class="small ghost" id="btnRenameArtist" hidden>이름 변경</button>
       <button class="small" id="btnPlayAll" hidden>▶ 전체 재생</button></div>
     <div class="cbd">
       <div id="libTools">
         <input id="q" placeholder="제목·아티스트 검색" style="width:100%">
         <div class="idx" id="idx"></div>
-        <div class="chips" id="artists"></div>
       </div>
+      <div id="bulk" class="bulk" hidden><input type="checkbox" id="selAll"><span id="bulkText">선택 0곡</span><span class="grow"></span><button class="small" id="btnBulkAssign">아티스트 지정</button><button class="small ghost" id="btnBulkUnassign">지정 해제</button></div>
       <div id="list"></div>
     </div>
   </div>
 
-  <!-- 오른쪽: 지금 재생 -->
   <div class="card">
     <div class="chd">지금 재생</div>
     <div class="cbd" style="display:flex;flex-direction:column;gap:12px">
@@ -97,130 +103,155 @@ dialog::backdrop{background:rgba(0,0,0,.55)}
         <div style="display:flex;gap:6px;align-items:center"><select id="inst" style="flex:1"><option value="">악기 그대로</option></select><button id="btnStop">■ 정지</button></div>
         <div class="note" id="actText" style="margin-top:8px">상태 —</div></div>
       <div><div class="note" style="margin-bottom:6px">최근 CLI 응답</div><div class="log" id="log">—</div></div>
-      <div class="note">같은 제목이 여러 개인 악보는 CLI 가 임의로 하나를 고릅니다(제어 불가). 목록의 <span class="badge">동명 N</span> 표시를 참고하세요.</div>
+      <div class="note">같은 제목이 여러 개인 악보는 CLI 가 임의로 하나를 고릅니다. <span class="badge">동명 N</span> 표시를 참고하세요. 아티스트는 제목 정규화로 추정한 것이며, 「기타」에 모인 곡은 직접 지정할 수 있습니다.</div>
     </div>
   </div>
 </div>
 
-<dialog id="dlg"><form method="dialog" style="display:flex;flex-direction:column;gap:10px"><div id="dlgTitle" style="font-weight:600">이름</div><input id="dlgInput" style="width:100%"><div style="display:flex;justify-content:flex-end;gap:6px"><button value="cancel">취소</button><button class="pri" value="ok" id="dlgOk">확인</button></div></form></dialog>
+<dialog id="dlg"><form method="dialog" style="display:flex;flex-direction:column;gap:10px"><div id="dlgTitle" style="font-weight:600">이름</div><input id="dlgInput" style="width:100%"><div style="display:flex;justify-content:flex-end;gap:6px"><button value="cancel">취소</button><button class="pri" value="ok">확인</button></div></form></dialog>
+<dialog id="rep" style="min-width:720px;max-width:90vw"><div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><b>정규화 보고</b><span class="note" id="repMeta"></span><span class="grow"></span><form method="dialog"><button value="ok">닫기</button></form></div><div class="log" id="repBody" style="max-height:70vh"></div></dialog>
 
 <script>
 const $=(id)=>document.getElementById(id);
 const api=async(path,body)=>{const r=await fetch(path,body?{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}:undefined);return r.json();};
 const esc=(s)=>String(s??"").replace(/[&<>"]/g,(c)=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const INDEX="ㄱㄴㄷㄹㅁㅂㅅㅇㅈㅊㅋㅌㅍㅎABCDEFGHIJKLMNOPQRSTUVWXYZ#";
-let state={lists:{folders:[],playlists:[]},items:[],summary:null,sel:null /* playlist id */,initial:"",artist:"",q:"",queue:[],qi:-1,playing:false,pollT:null};
+let state={lists:{folders:[],playlists:[]},artists:{artists:[],other:0,state:{}},items:[],summary:null,
+  view:{kind:"lib"} /* lib | pl:id | artist:key | other */,initial:"",q:"",queue:[],qi:-1,playing:false,pollT:null,selected:new Set()};
 
 function ask(title,def=""){return new Promise((res)=>{$("dlgTitle").textContent=title;$("dlgInput").value=def;$("dlg").onclose=()=>res($("dlg").returnValue==="ok"?$("dlgInput").value.trim():null);$("dlg").showModal();$("dlgInput").select();});}
 function fmtTs(t){return t?new Date(t*1000).toLocaleString("ko-KR",{month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"}):"—";}
 function log(obj){$("log").textContent=typeof obj==="string"?obj:JSON.stringify(obj,null,1).slice(0,4000);}
+function menu(e,items){document.querySelectorAll(".menu").forEach((m)=>m.remove());const m=document.createElement("div");m.className="menu";m.style.left=Math.min(e.pageX,window.innerWidth-240)+"px";m.style.top=e.pageY+"px";
+  m.innerHTML=items.map(([t,fn])=>`<div class="${fn?"":"hd"}">${esc(t)}</div>`).join("");[...m.children].forEach((c,i)=>{if(items[i][1])c.onclick=()=>{m.remove();items[i][1]();};});document.body.appendChild(m);setTimeout(()=>document.addEventListener("click",()=>m.remove(),{once:true}),0);}
 
-async function refreshState(){
-  const s=await api("/api/state");
-  const c=s.cli||{};
-  $("cliDot").className="dot "+(c.found?(c.pipe==="connected"?"on":"off"):"");
+async function refreshState(){const s=await api("/api/state");const c=s.cli||{};$("cliDot").className="dot "+(c.found?(c.pipe==="connected"?"on":"off"):"");
   $("cliText").textContent=!c.found?"CLI 없음 — 인게임 'MM AI 에이전트 활성화' 토글을 켜세요":(c.pipe==="connected"?"CLI 연결됨":`CLI 끊김 ${c.reason||c.status_error||""}`);
-  $("fetched").textContent=`악보 ${s.scores.count} · 악기 ${s.instruments.count} · 수신 ${fmtTs(s.scores.fetched_at)}`;
-}
-async function loadLists(){state.lists=await api("/api/playlists");renderTree();}
-async function loadInstruments(){const d=await api("/api/instruments");const sel=$("inst");const cur=sel.value;sel.innerHTML='<option value="">악기 그대로</option>'+d.items.map((i)=>`<option value="${esc(i.name)}">${esc(i.name)}</option>`).join("");sel.value=cur;}
-async function loadScores(){
-  const p=new URLSearchParams();if(state.q)p.set("q",state.q);if(state.initial)p.set("initial",state.initial);if(state.artist)p.set("artist",state.artist);
-  const d=await api("/api/scores?"+p);state.items=d.items;state.summary=d.summary;renderLib();
-}
+  $("fetched").textContent=`악보 ${s.scores.count} · 악기 ${s.instruments.count} · 수신 ${fmtTs(s.scores.fetched_at)}`;}
+async function loadLists(){state.lists=await api("/api/playlists");}
+async function loadArtists(){state.artists=await api("/api/artists");}
+async function loadInstruments(){const d=await api("/api/instruments");const sel=$("inst");const cur=sel.value;sel.innerHTML='<option value="">악기 그대로</option>'+d.items.map((i)=>`<option value="${esc(i.name)}">${esc(i.name)}${i.equipped?" (장착 중)":""}</option>`).join("");sel.value=cur;}
+async function loadScores(){const p=new URLSearchParams();if(state.q)p.set("q",state.q);if(state.initial)p.set("initial",state.initial);
+  const v=state.view;if(v.kind==="artist")p.set("artist",v.key);if(v.kind==="other")p.set("bucket","other");
+  const d=await api("/api/scores?"+p);state.items=d.items;state.summary=d.summary;}
+async function reloadAll(){await Promise.all([loadLists(),loadArtists(),loadScores()]);renderTree();renderMid();}
 
 function renderTree(){
-  const {folders,playlists}=state.lists;const el=$("tree");
-  const byParent=(pid)=>folders.filter((f)=>(f.parent||null)===pid);
-  const plsIn=(fid)=>playlists.filter((p)=>(p.folder||null)===fid);
-  const plRow=(p)=>`<div class="pl ${state.sel===p.id?"on":""}" data-pl="${p.id}">♪ ${esc(p.name)}<span class="cnt">${p.items.length}</span></div>`;
+  const {folders,playlists}=state.lists;const el=$("tree");const v=state.view;
+  const byParent=(pid)=>folders.filter((f)=>(f.parent||null)===pid);const plsIn=(fid)=>playlists.filter((p)=>(p.folder||null)===fid);
+  const plRow=(p)=>`<div class="pl ${v.kind==="pl"&&v.id===p.id?"on":""}" data-pl="${p.id}">♪ ${esc(p.name)}<span class="cnt">${p.items.length}</span></div>`;
   const fold=(fid)=>byParent(fid).map((f)=>`<div class="folder" data-f="${f.id}">▸ ${esc(f.name)}<span class="cnt">${plsIn(f.id).length}</span></div><div class="sub">${plsIn(f.id).map(plRow).join("")}${fold(f.id)}</div>`).join("");
-  el.innerHTML=`<div class="pl ${state.sel===null?"on":""}" data-pl="">♫ 전체 악보<span class="cnt">${state.summary?state.summary.count:""}</span></div>`+plsIn(null).map(plRow).join("")+fold(null)+(playlists.length||folders.length?"":`<div class="empty">+ 목록 으로 재생목록을 만드세요</div>`);
-  el.querySelectorAll("[data-pl]").forEach((n)=>{n.onclick=()=>{state.sel=n.dataset.pl||null;renderTree();renderMid();};n.oncontextmenu=(e)=>{e.preventDefault();if(n.dataset.pl)menu(e,[["이름 변경",()=>renamePl(n.dataset.pl)],["폴더로 이동",()=>movePl(n.dataset.pl)],["삭제",()=>delPl(n.dataset.pl)]]);};});
+  const arts=state.artists.artists||[];
+  el.innerHTML=`<div class="sec">라이브러리</div><div class="pl ${v.kind==="lib"?"on":""}" data-view="lib">♫ 전체 악보<span class="cnt">${state.summary?state.summary.count:""}</span></div>
+    <div class="sec">재생목록</div>${plsIn(null).map(plRow).join("")}${fold(null)}${playlists.length||folders.length?"":`<div class="note" style="padding:4px 8px">「+ 목록」으로 만드세요</div>`}
+    <div class="sec">아티스트 <span class="cnt" style="margin-left:auto">${arts.length}</span></div>${arts.map((a)=>`<div class="ar ${a.manual?"":"auto"} ${v.kind==="artist"&&v.key===a.key?"on":""}" data-ar="${esc(a.key)}" title="${a.manual?"수동 등록":"제목에서 자동 추출"}">${a.manual?"★":"·"} ${esc(a.name)}<span class="cnt">${a.count}</span></div>`).join("")}
+    <div class="sec">미분류</div><div class="pl ${v.kind==="other"?"on":""}" data-view="other">▣ 기타<span class="cnt">${state.artists.other||0}</span></div>`;
+  el.querySelectorAll("[data-view]").forEach((n)=>n.onclick=()=>setView({kind:n.dataset.view}));
+  el.querySelectorAll("[data-pl]").forEach((n)=>{n.onclick=()=>setView({kind:"pl",id:n.dataset.pl});n.oncontextmenu=(e)=>{e.preventDefault();menu(e,[["이름 변경",()=>renamePl(n.dataset.pl)],["폴더로 이동",()=>movePl(n.dataset.pl)],["삭제",()=>delPl(n.dataset.pl)]]);};});
   el.querySelectorAll("[data-f]").forEach((n)=>{n.oncontextmenu=(e)=>{e.preventDefault();menu(e,[["이름 변경",()=>renameFolder(n.dataset.f)],["하위 폴더",()=>newFolder(n.dataset.f)],["여기에 목록",()=>newList(n.dataset.f)],["폴더 삭제",()=>delFolder(n.dataset.f)]]);};});
+  el.querySelectorAll("[data-ar]").forEach((n)=>{n.onclick=()=>setView({kind:"artist",key:n.dataset.ar});n.oncontextmenu=(e)=>{e.preventDefault();const a=arts.find((x)=>x.key===n.dataset.ar);menu(e,[[a.manual?"이름 변경":"정식 아티스트로 등록",()=>registerOrRename(a)],["별칭 추가",()=>addAlias(a)],["다른 아티스트에 합치기",()=>mergeArtist(a)],a.manual?["삭제(지정 해제)",()=>delArtist(a)]:["",null]].filter((x)=>x[0]));};});
 }
-function menu(e,items){document.querySelectorAll(".menu").forEach((m)=>m.remove());const m=document.createElement("div");m.className="menu";m.style.left=e.pageX+"px";m.style.top=e.pageY+"px";m.innerHTML=items.map(([t])=>`<div>${esc(t)}</div>`).join("");[...m.children].forEach((c,i)=>c.onclick=()=>{m.remove();items[i][1]();});document.body.appendChild(m);setTimeout(()=>document.addEventListener("click",()=>m.remove(),{once:true}),0);}
+async function setView(v){state.view=v;state.selected.clear();state.initial="";await loadScores();renderTree();renderMid();}
 
 function renderMid(){
-  const pl=state.sel?state.lists.playlists.find((p)=>p.id===state.sel):null;
-  $("libTools").hidden=!!pl;$("btnBackLib").hidden=!pl;$("btnPlayAll").hidden=!pl;
-  if(!pl){$("midTitle").textContent="내 악보";renderLib();return;}
-  $("midTitle").textContent=pl.name;$("midMeta").textContent=`${pl.items.length}곡`;
+  const v=state.view;const s=state.summary||{byInitial:{},count:0};
+  const pl=v.kind==="pl"?state.lists.playlists.find((p)=>p.id===v.id):null;
+  $("libTools").hidden=!!pl;$("btnBackLib").hidden=v.kind==="lib";$("btnPlayAll").hidden=!pl;$("btnRenameArtist").hidden=v.kind!=="artist";
+  $("bulk").hidden=!(v.kind==="other"||v.kind==="artist"||v.kind==="lib");
+  if(pl){$("midTitle").textContent=pl.name;$("midMeta").textContent=`${pl.items.length}곡`;renderPlaylist(pl);return;}
+  const art=v.kind==="artist"?(state.artists.artists||[]).find((a)=>a.key===v.key):null;
+  $("midTitle").textContent=v.kind==="lib"?"내 악보":v.kind==="other"?"기타 (미분류)":(art?art.name:"아티스트");
+  $("midMeta").textContent=`${state.items.length}곡${v.kind==="lib"&&s.rules?` · 인식 ${s.count-s.other} / 기타 ${s.other}`:""}${s.duplicateTitles&&s.duplicateTitles.length&&v.kind==="lib"?` · 동명 ${s.duplicateTitles.length}건`:""}`;
+  $("idx").innerHTML=[...INDEX].map((c)=>`<span class="${state.initial===c?"on":""} ${s.byInitial[c]?"":"zero"}" data-i="${c}">${c}</span>`).join("");
+  $("idx").querySelectorAll("span").forEach((n)=>n.onclick=async()=>{if(n.classList.contains("zero")&&state.initial!==n.dataset.i)return;state.initial=state.initial===n.dataset.i?"":n.dataset.i;await loadScores();renderMid();});
+  const rows=state.items.map((it,i)=>`<div class="row sel"><span class="n">${i+1}</span><input type="checkbox" data-ck="${esc(it.title)}" ${state.selected.has(it.title)?"checked":""}>
+    <span class="t">${esc(it.song||it.cleaned)}${it.artist&&v.kind!=="artist"?`<small>${esc(it.artist)}</small>`:""}${it.variant?`<span class="badge var">${esc(it.variant)}</span>`:""}${(it.tags||[]).map((t)=>`<span class="badge tag">${esc(t)}</span>`).join("")}${it.dupExact>1?`<span class="badge">동명 ${it.dupExact}</span>`:""}${it.manual?`<span class="badge rule">수동</span>`:""}<span class="orig">${esc(it.title)}</span></span>
+    <span class="acts"><button class="small" data-play="${esc(it.title)}">▶</button><button class="small" data-add="${esc(it.title)}">+</button><button class="small ghost" data-assign="${esc(it.title)}" title="아티스트 지정/변경">인물</button></span></div>`).join("");
+  $("list").innerHTML=rows||`<div class="empty">${s.count?(v.kind==="other"?"미분류 곡이 없습니다":"검색 결과 없음"):"아직 수신한 악보가 없습니다 — 「갱신」을 누르세요"}</div>`;
+  bindRows();updateBulk();
+}
+function renderPlaylist(pl){
   const byTitle=new Map(state.items.map((it)=>[it.title,it]));
-  $("list").innerHTML=pl.items.length?pl.items.map((t,i)=>{const it=byTitle.get(t);return `<div class="row"><span class="n">${i+1}</span><span class="t">${esc(t)}${it&&it.artist?`<small>${esc(it.artist)}</small>`:""}${it&&it.dupExact>1?`<span class="badge">동명 ${it.dupExact}</span>`:""}${it?"":`<span class="badge">목록에 없음</span>`}</span>
+  $("list").innerHTML=pl.items.length?pl.items.map((t,i)=>{const it=byTitle.get(t);return `<div class="row"><span class="n">${i+1}</span><span class="t">${esc(it?(it.song||it.cleaned):t)}${it&&it.artist?`<small>${esc(it.artist)}</small>`:""}${it&&it.dupExact>1?`<span class="badge">동명 ${it.dupExact}</span>`:""}${it?"":`<span class="badge">보관함에 없음</span>`}<span class="orig">${esc(t)}</span></span>
     <span class="acts"><button class="small" data-play="${esc(t)}">▶</button><button class="small ghost" data-up="${i}">↑</button><button class="small ghost" data-down="${i}">↓</button><button class="small ghost" data-rm="${esc(t)}">✕</button></span></div>`;}).join(""):`<div class="empty">비어 있음 — 전체 악보에서 「+」로 담으세요</div>`;
   bindRows();
 }
-function renderLib(){
-  if(state.sel)return;
-  const s=state.summary||{byInitial:{},artists:[],count:0};
-  $("midMeta").textContent=`${state.items.length} / ${s.count}곡${s.duplicateTitles&&s.duplicateTitles.length?` · 동명 ${s.duplicateTitles.length}건`:""}`;
-  $("idx").innerHTML=[...INDEX].map((c)=>`<span class="${state.initial===c?"on":""} ${s.byInitial[c]?"":"zero"}" data-i="${c}">${c}</span>`).join("");
-  $("idx").querySelectorAll("span").forEach((n)=>n.onclick=()=>{if(n.classList.contains("zero")&&state.initial!==n.dataset.i)return;state.initial=state.initial===n.dataset.i?"":n.dataset.i;loadScores();});
-  $("artists").innerHTML=(s.artists||[]).slice(0,24).map(([a,n])=>`<span class="chip ${state.artist===a?"on":""}" data-a="${esc(a)}">${esc(a)} <b>${n}</b></span>`).join("");
-  $("artists").querySelectorAll(".chip").forEach((n)=>n.onclick=()=>{state.artist=state.artist===n.dataset.a?"":n.dataset.a;loadScores();});
-  $("list").innerHTML=state.items.length?state.items.map((it,i)=>`<div class="row"><span class="n">${i+1}</span><span class="t">${esc(it.song||it.title)}${it.artist?`<small>${esc(it.artist)}</small>`:""}${it.dupExact>1?`<span class="badge">동명 ${it.dupExact}</span>`:""}</span>
-    <span class="acts"><button class="small" data-play="${esc(it.title)}">▶</button><button class="small" data-add="${esc(it.title)}">+</button></span></div>`).join(""):`<div class="empty">${s.count?"검색 결과 없음":"아직 수신한 악보가 없습니다 — 「갱신」을 누르세요"}</div>`;
-  bindRows();
-}
 function bindRows(){
-  $("list").querySelectorAll("[data-play]").forEach((b)=>b.onclick=()=>playOne(b.dataset.play));
-  $("list").querySelectorAll("[data-add]").forEach((b)=>b.onclick=(e)=>addTo(e,b.dataset.add));
-  $("list").querySelectorAll("[data-rm]").forEach((b)=>b.onclick=async()=>{state.lists=await api("/api/playlists",{op:"remove",id:state.sel,titles:[b.dataset.rm]});renderTree();renderMid();});
-  $("list").querySelectorAll("[data-up],[data-down]").forEach((b)=>b.onclick=async()=>{const pl=state.lists.playlists.find((p)=>p.id===state.sel);const a=[...pl.items];const i=Number(b.dataset.up??b.dataset.down);const j=b.dataset.up!==undefined?i-1:i+1;if(j<0||j>=a.length)return;[a[i],a[j]]=[a[j],a[i]];state.lists=await api("/api/playlists",{op:"reorder",id:state.sel,items:a});renderTree();renderMid();});
+  const L=$("list");
+  L.querySelectorAll("[data-play]").forEach((b)=>b.onclick=()=>playOne(b.dataset.play));
+  L.querySelectorAll("[data-add]").forEach((b)=>b.onclick=(e)=>addTo(e,b.dataset.add));
+  L.querySelectorAll("[data-assign]").forEach((b)=>b.onclick=(e)=>assignMenu(e,[b.dataset.assign]));
+  L.querySelectorAll("[data-ck]").forEach((c)=>c.onchange=()=>{c.checked?state.selected.add(c.dataset.ck):state.selected.delete(c.dataset.ck);updateBulk();});
+  L.querySelectorAll("[data-rm]").forEach((b)=>b.onclick=async()=>{state.lists=await api("/api/playlists",{op:"remove",id:state.view.id,titles:[b.dataset.rm]});renderTree();renderMid();});
+  L.querySelectorAll("[data-up],[data-down]").forEach((b)=>b.onclick=async()=>{const pl=state.lists.playlists.find((p)=>p.id===state.view.id);const a=[...pl.items];const i=Number(b.dataset.up??b.dataset.down);const j=b.dataset.up!==undefined?i-1:i+1;if(j<0||j>=a.length)return;[a[i],a[j]]=[a[j],a[i]];state.lists=await api("/api/playlists",{op:"reorder",id:state.view.id,items:a});renderTree();renderMid();});
 }
-function addTo(e,title){
-  const pls=state.lists.playlists;
-  if(!pls.length){newList(null,[title]);return;}
-  menu(e,pls.map((p)=>[`${p.name} (${p.items.length})`,async()=>{state.lists=await api("/api/playlists",{op:"add",id:p.id,titles:[title]});renderTree();}]).concat([["+ 새 재생목록에 담기",()=>newList(null,[title])]]));
+function updateBulk(){const n=state.selected.size;$("bulkText").textContent=`선택 ${n}곡`;$("btnBulkAssign").disabled=!n;$("btnBulkUnassign").disabled=!n;$("selAll").checked=n>0&&n===state.items.length;}
+$("selAll").onchange=()=>{state.selected=new Set($("selAll").checked?state.items.map((i)=>i.title):[]);renderMid();};
+$("btnBulkAssign").onclick=(e)=>assignMenu(e,[...state.selected]);
+$("btnBulkUnassign").onclick=async()=>{await api("/api/artists",{op:"unassign",titles:[...state.selected]});state.selected.clear();await reloadAll();};
+
+// ── 아티스트 지정 ──
+function assignMenu(e,titles){
+  const arts=state.artists.artists||[];
+  const manual=arts.filter((a)=>a.manual),auto=arts.filter((a)=>!a.manual);
+  const items=[[`${titles.length}곡 → 아티스트 지정`,null]];
+  // 한 곡일 때: 아티스트/곡이 뒤집힌 경우('Heal the World - 마이클')를 한 번에 고치는 「뒤집기」
+  if(titles.length===1){const it=state.items.find((x)=>x.title===titles[0]);
+    if(it&&it.artist&&it.song)items.push([`뒤집기: 「${it.song}」을 아티스트로`,async()=>{await api("/api/artists",{op:"assign",titles,name:it.song});state.selected.clear();await reloadAll();}]);
+    if(it&&!it.artist){const first=(it.song||it.cleaned).split(/\s+/)[0];if(first&&first.length>=2&&first!==it.song)items.push([`첫 단어 「${first}」을 아티스트로`,async()=>{await api("/api/artists",{op:"assign",titles,name:first});state.selected.clear();await reloadAll();}]);}}
+  items.push(["+ 새 아티스트…",async()=>{const it=titles.length===1?state.items.find((x)=>x.title===titles[0]):null;const name=await ask("아티스트 이름",it&&it.artist?it.artist:"");if(!name)return;await api("/api/artists",{op:"assign",titles,name});state.selected.clear();await reloadAll();}]);
+  if(manual.length)items.push(["— 등록된 아티스트 —",null]);
+  manual.forEach((a)=>items.push([`★ ${a.name} (${a.count})`,async()=>{await api("/api/artists",{op:"assign",titles,id:a.key});state.selected.clear();await reloadAll();}]));
+  if(auto.length)items.push(["— 자동 추출 (지정하면 정식 등록) —",null]);
+  auto.slice(0,40).forEach((a)=>items.push([`· ${a.name} (${a.count})`,async()=>{await api("/api/artists",{op:"assign",titles,name:a.name});state.selected.clear();await reloadAll();}]));
+  items.push(["지정 해제",async()=>{await api("/api/artists",{op:"unassign",titles});state.selected.clear();await reloadAll();}]);
+  menu(e,items);
 }
+async function registerOrRename(a){const name=await ask(a.manual?"아티스트 이름 변경":"정식 아티스트로 등록",a.name);if(!name)return;
+  if(a.manual)await api("/api/artists",{op:"rename",id:a.key,name});
+  else{const titles=state.items.length&&state.view.kind==="artist"&&state.view.key===a.key?state.items.map((i)=>i.title):(await api("/api/scores?artist="+encodeURIComponent(a.key))).items.map((i)=>i.title);await api("/api/artists",{op:"assign",titles,name});}
+  await reloadAll();}
+async function addAlias(a){if(!a.manual){alert("먼저 정식 아티스트로 등록하세요");return;}const al=await ask(`「${a.name}」의 별칭 (예: IU, 방탄소년단)`);if(!al)return;await api("/api/artists",{op:"alias",id:a.key,alias:al});await reloadAll();}
+function mergeArtist(a){const targets=(state.artists.artists||[]).filter((x)=>x.manual&&x.key!==a.key);if(!targets.length){alert("합칠 정식 아티스트가 없습니다");return;}
+  menu({pageX:320,pageY:160},[[`「${a.name}」을 다음으로 합치기`,null]].concat(targets.map((t)=>[`★ ${t.name}`,async()=>{
+    if(a.manual)await api("/api/artists",{op:"merge",from:a.key,into:t.key});
+    else{const titles=(await api("/api/scores?artist="+encodeURIComponent(a.key))).items.map((i)=>i.title);await api("/api/artists",{op:"assign",titles,id:t.key});await api("/api/artists",{op:"alias",id:t.key,alias:a.name});}
+    if(state.view.kind==="artist")state.view={kind:"artist",key:t.key};await reloadAll();}])));}
+async function delArtist(a){if(!confirm(`「${a.name}」 등록을 지우고 곡들의 지정을 해제할까요?`))return;await api("/api/artists",{op:"delete",id:a.key});if(state.view.kind==="artist")state.view={kind:"lib"};await reloadAll();}
+$("btnRenameArtist").onclick=()=>{const a=(state.artists.artists||[]).find((x)=>x.key===state.view.key);if(a)registerOrRename(a);};
 
 // ── 재생 ──
-async function playOne(title){
-  state.queue=[];state.qi=-1;
-  await sendPlay(title);
-}
-async function sendPlay(title){
-  $("nowTitle").textContent=title;$("actText").textContent="전송 중…";
-  const r=await api("/api/play",{title,instrument:$("inst").value||null});
-  log(r);
-  $("actText").textContent=r.ok?"재생 명령 수락":"실패: "+(r.steps.at(-1)?.error||"")+" "+(r.steps.at(-1)?.message||"");
-  state.playing=r.ok;if(r.ok)startPoll();
-}
-async function playAll(){
-  const pl=state.lists.playlists.find((p)=>p.id===state.sel);if(!pl||!pl.items.length)return;
-  state.queue=[...pl.items];state.qi=0;await sendPlay(state.queue[0]);
-}
+async function playOne(title){state.queue=[];state.qi=-1;await sendPlay(title);}
+async function sendPlay(title){$("nowTitle").textContent=title;$("actText").textContent="전송 중…";const r=await api("/api/play",{title,instrument:$("inst").value||null});log(r);
+  $("actText").textContent=r.ok?"재생 명령 수락":"실패: "+(r.steps.at(-1)?.error||"")+" "+(r.steps.at(-1)?.message||"");state.playing=r.ok;if(r.ok)startPoll();}
+async function playAll(){const pl=state.lists.playlists.find((p)=>p.id===state.view.id);if(!pl||!pl.items.length)return;state.queue=[...pl.items];state.qi=0;await sendPlay(state.queue[0]);}
 function startPoll(){clearInterval(state.pollT);state.pollT=setInterval(pollAct,4000);}
-async function pollAct(){
-  const a=await api("/api/activity");const b=a.body||{};
-  const playing=!!b.IsAutoPlaying;
-  $("actText").textContent=`${playing?"재생 중":"대기"} · 버튼 ${b.MainButtonState||"?"}`;
-  if(!playing&&state.playing){
-    state.playing=false;
-    if(state.qi>=0&&state.qi<state.queue.length-1){state.qi++;await sendPlay(state.queue[state.qi]);return;}
-    clearInterval(state.pollT);
-  }
-}
+async function pollAct(){const a=await api("/api/activity");const b=a.body||{};const playing=!!b.IsAutoPlaying;$("actText").textContent=`${playing?"재생 중":"대기"} · 버튼 ${b.MainButtonState||"?"}`;
+  if(!playing&&state.playing){state.playing=false;if(state.qi>=0&&state.qi<state.queue.length-1){state.qi++;await sendPlay(state.queue[state.qi]);return;}clearInterval(state.pollT);}}
 $("btnStop").onclick=async()=>{state.queue=[];state.qi=-1;const r=await api("/api/stop",{});log(r);$("actText").textContent=r.ok?"정지됨":"정지 실패 — 잠시 후 다시";state.playing=false;clearInterval(state.pollT);};
 $("btnPlayAll").onclick=playAll;
 
-// ── 목록·폴더 조작 ──
-async function newList(folder=null,titles=[]){const name=await ask("재생목록 이름","새 재생목록");if(name===null)return;state.lists=await api("/api/playlists",{op:"create",name,folder});const pl=state.lists.playlists.at(-1);if(titles.length)state.lists=await api("/api/playlists",{op:"add",id:pl.id,titles});state.sel=pl.id;renderTree();renderMid();}
+// ── 재생목록·폴더 ──
+function addTo(e,title){const pls=state.lists.playlists;if(!pls.length){newList(null,[title]);return;}
+  menu(e,pls.map((p)=>[`♪ ${p.name} (${p.items.length})`,async()=>{state.lists=await api("/api/playlists",{op:"add",id:p.id,titles:[title]});renderTree();}]).concat([["+ 새 재생목록에 담기",()=>newList(null,[title])]]));}
+async function newList(folder=null,titles=[]){const name=await ask("재생목록 이름","새 재생목록");if(name===null)return;state.lists=await api("/api/playlists",{op:"create",name,folder});const pl=state.lists.playlists.at(-1);if(titles.length)state.lists=await api("/api/playlists",{op:"add",id:pl.id,titles});setView({kind:"pl",id:pl.id});}
 async function newFolder(parent=null){const name=await ask("폴더 이름","새 폴더");if(name===null)return;state.lists=await api("/api/playlists",{op:"folder_create",name,parent});renderTree();}
 async function renamePl(id){const pl=state.lists.playlists.find((p)=>p.id===id);const name=await ask("이름 변경",pl.name);if(name===null)return;state.lists=await api("/api/playlists",{op:"rename",id,name});renderTree();renderMid();}
 async function renameFolder(id){const f=state.lists.folders.find((x)=>x.id===id);const name=await ask("폴더 이름",f.name);if(name===null)return;state.lists=await api("/api/playlists",{op:"folder_rename",id,name});renderTree();}
-async function delPl(id){if(!confirm("이 재생목록을 삭제할까요?"))return;state.lists=await api("/api/playlists",{op:"delete",id});if(state.sel===id)state.sel=null;renderTree();renderMid();}
+async function delPl(id){if(!confirm("이 재생목록을 삭제할까요?"))return;state.lists=await api("/api/playlists",{op:"delete",id});if(state.view.kind==="pl"&&state.view.id===id)state.view={kind:"lib"};renderTree();renderMid();}
 async function delFolder(id){if(!confirm("폴더를 삭제할까요? (안의 목록은 상위로 옮겨집니다)"))return;state.lists=await api("/api/playlists",{op:"folder_delete",id});renderTree();}
 function movePl(id){const fs=state.lists.folders;menu({pageX:300,pageY:120},[["(폴더 없음)",async()=>{state.lists=await api("/api/playlists",{op:"move",id,folder:null});renderTree();}]].concat(fs.map((f)=>[f.name,async()=>{state.lists=await api("/api/playlists",{op:"move",id,folder:f.id});renderTree();}])));}
 $("btnNewList").onclick=()=>newList(null);$("btnNewFolder").onclick=()=>newFolder(null);
-$("btnBackLib").onclick=()=>{state.sel=null;renderTree();renderMid();};
-$("q").oninput=()=>{state.q=$("q").value;clearTimeout(state._qt);state._qt=setTimeout(loadScores,150);};
+$("btnBackLib").onclick=()=>setView({kind:"lib"});
+$("q").oninput=()=>{state.q=$("q").value;clearTimeout(state._qt);state._qt=setTimeout(async()=>{await loadScores();renderMid();},150);};
 
-// ── 갱신 ──
-$("btnSync").onclick=async()=>{$("btnSync").disabled=true;$("btnSync").textContent="갱신 중…";const r=await api("/api/sync",{});log(r);$("btnSync").disabled=false;$("btnSync").textContent="갱신";await refreshState();await loadInstruments();await loadScores();renderTree();if(!r.ok)alert("갱신 실패: "+(r.steps.find((s)=>!s.ok)?.error||"")+"\n"+(r.steps.find((s)=>!s.ok)?.message||""));};
+// ── 갱신·보고 ──
+$("btnSync").onclick=async()=>{$("btnSync").disabled=true;$("btnSync").textContent="갱신 중…";const r=await api("/api/sync",{});log(r);$("btnSync").disabled=false;$("btnSync").textContent="갱신";await refreshState();await loadInstruments();await reloadAll();
+  if(!r.ok)alert("갱신 실패: "+(r.steps.find((s)=>!s.ok)?.error||"")+"\n"+(r.steps.find((s)=>!s.ok)?.message||""));};
+$("btnReport").onclick=async()=>{const d=await api("/api/normalize");const s=d.summary;$("repMeta").textContent=`${s.count}곡 · 규칙 ${JSON.stringify(s.rules)} · 기타 ${s.other}`;
+  $("repBody").textContent=d.rows.map((r)=>`${(r.bucket==="other"?"기타":"인식").padEnd(2)} ${r.rule.padEnd(6)} | ${r.title}\n      → 아티스트 [${r.artist}] 곡 [${r.song}]${r.variant?` 변형 ${r.variant}`:""}${r.tags.length?` 태그 ${r.tags.join(",")}`:""}${r.removed.length?` 제거 ${r.removed.join(" ")}`:""}`).join("\n");$("rep").showModal();};
 
-(async()=>{await refreshState();await loadLists();await loadInstruments();await loadScores();renderTree();renderMid();setInterval(refreshState,15000);})();
+(async()=>{await refreshState();await loadInstruments();await reloadAll();setInterval(refreshState,15000);})();
 </script>
 </body>
 </html>
