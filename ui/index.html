@@ -103,6 +103,12 @@ dialog{background:var(--card);color:var(--ink);border:1px solid var(--line);bord
 #toast{position:fixed;left:50%;top:14px;transform:translateX(-50%);z-index:60;background:rgba(232,138,166,.14);border:1px solid rgba(232,138,166,.45);color:var(--strong);padding:8px 14px;border-radius:9px;font-size:12.5px;max-width:80vw;box-shadow:0 10px 30px var(--shadow)}dialog::backdrop{background:var(--shadow)}
 .menu{position:fixed;background:var(--card);border:1px solid var(--line);border-radius:9px;padding:6px;z-index:40;min-width:200px;max-height:60vh;overflow:auto;box-shadow:0 10px 30px var(--shadow)}
 .menu div{padding:6px 10px;border-radius:6px;cursor:pointer;font-size:13px;white-space:nowrap}.menu div:hover{background:var(--card2)}.menu .hd{color:var(--faint);font-size:11px;cursor:default}.menu .hd:hover{background:transparent}
+.rcol{display:flex;flex-direction:column;gap:0;min-height:0}
+.rcol #selCard{flex:0 0 auto;height:var(--selH,42%);min-height:120px;max-height:calc(100% - 140px)}.rcol.noq #selCard{flex:1;height:auto;max-height:none}
+.splitV{height:14px;flex:0 0 14px;cursor:row-resize;display:flex;align-items:center;justify-content:center}.splitV::before{content:"";width:44px;height:4px;border-radius:2px;background:var(--line)}.splitV:hover::before,.splitV.on::before{background:var(--gold)}
+.rcol #queueCard{flex:1;min-height:120px}
+.status.btn{cursor:pointer;padding:4px 8px;border-radius:7px;border:1px solid transparent}.status.btn:hover{border-color:var(--line);color:var(--ink2)}
+#logDlg{width:min(760px,92vw);padding:0}#logDlg .chd{border-radius:12px 12px 0 0}#logDlg #logBody{max-height:70vh;overflow:auto;padding:10px 12px}
 .frm{display:grid;grid-template-columns:150px 1fr;gap:10px 12px;align-items:center;font-size:13px}.frm label{color:var(--muted)}.frm .hint{grid-column:2;font-size:11.5px;color:var(--faint);margin-top:-6px}
 </style>
 </head>
@@ -124,7 +130,7 @@ dialog{background:var(--card);color:var(--ink);border:1px solid var(--line);bord
 <div class="top">
   <div class="brand"><img src="MobiFolio.svg" alt="" class="logo"><span><small>MABINOGI MOBILE FAN PROJECT</small><b>MobiFolio</b></span></div>
   <span class="grow"></span>
-  <span class="status"><span class="dot" id="cliDot"></span><span id="cliText">CLI 확인 중</span></span>
+  <span class="status btn" id="cliStatus" title="CLI 응답 로그 보기" role="button" tabindex="0"><span class="dot" id="cliDot"></span><span id="cliText">CLI 확인 중</span></span>
   <span class="status" id="fetched">—</span>
   <button class="ghost small" id="btnReport"><svg class="i s"><use href="#ic-doc"/></svg>정규화 보고</button>
   <button class="ghost small" id="themeBtn" title="테마: 자동(OS 설정) → 다크 → 라이트">테마: 자동</button>
@@ -140,10 +146,10 @@ dialog{background:var(--card);color:var(--ink);border:1px solid var(--line);bord
     <div class="cbd" id="mid"></div>
   </div>
 
-  <div style="display:flex;flex-direction:column;gap:12px;min-height:0">
+  <div class="rcol noq" id="rcol">
     <div class="card" id="selCard"><div class="chd">선택한 악보<span class="grow"></span><span class="m" id="selMeta"></span></div><div class="cbd" id="selBody"><div class="empty">목록에서 곡을 누르세요</div></div></div>
+    <div class="splitV" id="splitV" title="드래그해서 높이 조절" hidden></div>
     <div class="card" id="queueCard" hidden><div class="chd">다음 재생<span class="m" id="queueMeta"></span><span class="grow"></span><button class="small ghost" id="btnClearQueue">비우기</button></div><div class="cbd" id="queueBody"></div></div>
-    <div class="card" style="flex:1"><div class="chd">CLI 응답<span class="m" id="logMeta"></span><span class="grow"></span><button class="small ghost" id="btnRaw">원문</button></div><div class="cbd" id="logBody"><div class="empty">아직 없음</div></div></div>
   </div>
 </div>
 
@@ -165,6 +171,7 @@ dialog{background:var(--card);color:var(--ink);border:1px solid var(--line);bord
 
 <dialog id="dlg"><form method="dialog" style="display:flex;flex-direction:column;gap:10px"><div id="dlgTitle" style="font-weight:600">이름</div><input id="dlgInput" style="width:100%"><div style="display:flex;justify-content:flex-end;gap:6px"><button type="button" id="dlgCancel">취소</button><button class="pri" value="ok">확인</button></div></form></dialog>
 <div id="toast" hidden></div>
+<dialog id="logDlg"><div class="chd">CLI 응답<span class="m" id="logMeta"></span><span class="grow"></span><button class="small ghost" id="btnRaw">원문</button><form method="dialog"><button class="small">닫기</button></form></div><div id="logBody"><div class="empty">아직 없음</div></div></dialog>
 <dialog id="rep" style="width:min(760px,92vw)"><div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><b>정규화 보고</b><span class="note" id="repMeta"></span><span class="grow"></span><form method="dialog"><button value="ok">닫기</button></form></div><div class="raw" id="repBody" style="max-height:70vh"></div></dialog>
 <dialog id="set" style="width:min(560px,92vw)"><div style="display:flex;align-items:center;gap:8px;margin-bottom:14px"><b>설정</b><span class="grow"></span><form method="dialog"><button value="cancel">닫기</button></form></div>
   <div class="frm">
@@ -483,7 +490,7 @@ $("btnShuffle").onclick=toggleShuffle;$("btnRepeat").onclick=cycleRepeat;
 $("btnQueue").onclick=()=>{S.queueHidden=!S.queueHidden;renderQueue();};$("btnClearQueue").onclick=()=>{S.queue=[];S.order=[];S.qi=-1;renderQueue();};
 function renderQueue(){const ord=qOrder(),pos=qPos();const up=ord.slice(pos+1).map((i)=>S.queue[i]);const remain=up.reduce((a,it)=>a+((S.byTitle.get(it.title)||{}).duration||0),0);
   $("queueN").textContent=up.length;$("queueMeta").textContent=S.queue.length?`${S.src.startsWith("pl:")?((S.lists.playlists.find((p)=>"pl:"+p.id===S.src)||{}).name||""):S.src==="view"?"현재 목록":"단일 재생"}${up.length?` · 남은 ${up.length}곡${remain?" · "+fmtSec(remain):""}`:""}${S.repeat!=="off"?" · 반복 "+{all:"전체",one:"한 곡"}[S.repeat]:""}${S.shuffle?" · 셔플":""}`:"";
-  $("queueCard").hidden=!S.queue.length||!!S.queueHidden;
+  $("queueCard").hidden=!S.queue.length||!!S.queueHidden;layoutRight();
   const now=S.queue[S.qi];const lib=(t)=>S.byTitle.get(t)||{};
   $("queueBody").innerHTML=(now?`<div style="padding:9px 11px;border-radius:9px;border:1px solid var(--goldline);background:var(--goldwash);margin-bottom:6px"><div style="font-size:11px;color:var(--gold);letter-spacing:.08em">${S.playing?"재생 중":"현재"}</div><div style="font-weight:700;color:var(--strong)">${esc(lib(now.title).song||now.title)}</div><div style="font-size:11.5px;color:var(--ink2)">${esc(lib(now.title).artist||"")}${now.inst?" · "+esc(now.inst):" · 악기 그대로"}</div></div>`:"")+
     (up.length?up.slice(0,30).map((it,k)=>`<div style="display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:center;padding:6px 9px;border-radius:8px;border:1px solid var(--line2);margin-bottom:4px;cursor:pointer" data-qj="${ord[pos+1+k]}"><span class="num" style="font-size:11px;color:var(--faint);width:16px">${k+1}</span><div style="min-width:0"><div style="font-size:12.5px;color:var(--ink);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(lib(it.title).song||it.title)}</div><div style="font-size:11px;color:var(--muted)">${esc(lib(it.title).artist||"")}${it.inst?" · "+esc(it.inst):""}</div></div><span class="num" style="font-size:11px;color:var(--muted)">${lib(it.title).duration?fmtSec(lib(it.title).duration):""}</span></div>`).join("")+(up.length>30?`<div class="note" style="text-align:center">+ ${up.length-30}곡</div>`:""):`<div class="note" style="padding:4px 2px">다음 곡 없음</div>`);
@@ -518,6 +525,17 @@ async function delPl(id){if(!confirm("이 재생목록을 삭제할까요?"))ret
 async function delFolder(id){if(!confirm("폴더를 삭제할까요? (안의 목록은 상위로 옮겨집니다)"))return;await listsApi({op:"folder_delete",id});renderTree();}
 function movePl(id){menu({clientX:280,clientY:140},[["(폴더 없음)",async()=>{await listsApi({op:"move",id,folder:null});render();}]].concat(S.lists.folders.map((f)=>[f.name,async()=>{await listsApi({op:"move",id,folder:f.id});render();}])));}
 $("btnNewList").onclick=()=>newList(null);$("btnNewFolder").onclick=()=>newFolder(null);
+
+/* ── 오른쪽 열: 선택 카드/큐 높이 드래그 (localStorage 에 기억), CLI 로그 팝업 ── */
+function layoutRight(){const q=$("queueCard").hidden;$("rcol").classList.toggle("noq",q);$("splitV").hidden=q;
+  const h=parseInt(localStorage.getItem("mobifolio.selH")||"0",10);if(h>0)$("rcol").style.setProperty("--selH",h+"px");}
+$("splitV").onmousedown=(e)=>{e.preventDefault();const col=$("rcol"),sel=$("selCard");const y0=e.clientY,h0=sel.getBoundingClientRect().height;$("splitV").classList.add("on");document.body.style.cursor="row-resize";
+  const mv=(ev)=>{const max=col.getBoundingClientRect().height-140,h=Math.max(120,Math.min(max,h0+(ev.clientY-y0)));col.style.setProperty("--selH",h+"px");};
+  const up=()=>{document.removeEventListener("mousemove",mv);document.removeEventListener("mouseup",up);$("splitV").classList.remove("on");document.body.style.cursor="";try{localStorage.setItem("mobifolio.selH",String(Math.round(sel.getBoundingClientRect().height)));}catch{}};
+  document.addEventListener("mousemove",mv);document.addEventListener("mouseup",up);};
+$("splitV").ondblclick=()=>{try{localStorage.removeItem("mobifolio.selH");}catch{}$("rcol").style.removeProperty("--selH");};
+$("cliStatus").onclick=()=>{loadLog();$("logDlg").showModal();};$("cliStatus").onkeydown=(e)=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();$("cliStatus").click();}};
+layoutRight();
 
 /* ── 테마: 자동(OS) / 다크 / 라이트 ── */
 const THEME_KEY="mobifolio.theme",THEME_ORDER=["auto","dark","light"],THEME_LABEL={auto:"자동",dark:"다크",light:"라이트"};
