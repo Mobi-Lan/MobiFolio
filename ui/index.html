@@ -195,14 +195,14 @@ let S={all:[],byTitle:new Map(),summary:{artists:[],other:0,count:0,byInitial:{}
   queue:[],order:[],qi:-1,src:"",shuffle:false,repeat:"off",now:null,playing:false,pollT:null,startedAt:0,advancing:false,manualStop:false,gapT:null,
   instrument:"",rawOpen:false,logs:[]};
 
-function ask(title,def=""){return new Promise((res)=>{$("dlgTitle").textContent=title;$("dlgInput").value=def;$("dlg").onclose=()=>res($("dlg").returnValue==="ok"?$("dlgInput").value.trim():null);$("dlg").showModal();$("dlgInput").select();});}
+function ask(title,def=""){return new Promise((res)=>{$("dlgTitle").textContent=title;$("dlgInput").value=def;$("dlg").returnValue="";$("dlg").onclose=()=>res($("dlg").returnValue==="ok"?$("dlgInput").value.trim():null);$("dlg").showModal();$("dlgInput").select();});}
 function menu(e,items){closeFloating();const m=document.createElement("div");m.className="menu";const x=Math.min(e.clientX??e.pageX,window.innerWidth-230);
   m.innerHTML=items.map(([t,fn])=>`<div class="${fn?"":"hd"}">${esc(t)}</div>`).join("");[...m.children].forEach((c,i)=>{if(items[i][1])c.onclick=()=>{m.remove();items[i][1]();};});document.body.appendChild(m);
   const h=m.offsetHeight,y0=e.clientY??e.pageY;let y=Math.min(y0,window.innerHeight-h-10);if(y<10)y=10;m.style.left=x+"px";m.style.top=y+"px";m.style.maxHeight=(window.innerHeight-y-10)+"px";
   setTimeout(()=>document.addEventListener("click",()=>m.remove(),{once:true}),0);}
 // 열려 있는 드롭다운·메뉴를 전부 닫는다 (문서 수준 리스너 하나로 관리 — 렌더마다 리스너가 쌓이지 않게)
 function closeFloating(){document.querySelectorAll(".menu").forEach((m)=>m.remove());document.querySelectorAll(".dd-list:not([hidden])").forEach((l)=>{l.hidden=true;const b=l.parentElement&&l.parentElement.querySelector(".dd-btn");if(b)b.classList.remove("open");});}
-window.addEventListener("resize",closeFloating);document.addEventListener("scroll",closeFloating,true);
+window.addEventListener("resize",closeFloating);document.addEventListener("scroll",(ev)=>{if(ev.target instanceof Element&&ev.target.closest(".dd-list,.menu"))return;closeFloating();},true);
 document.addEventListener("keydown",(ev)=>{if(ev.key==="Escape"){const open=document.querySelector(".dd-list:not([hidden]),.menu");if(open){closeFloating();ev.preventDefault();ev.stopPropagation();}}},true);
 
 /* ── 드롭다운 (범용) ── */
@@ -226,20 +226,26 @@ const instItems=()=>[{v:"",label:S.settings.default_inst?`기본 악기 (${S.set
 const instItemsSet=()=>[{v:"",label:"지정 안 함 (장착 악기 그대로)"}].concat(S.instruments.map((i,k)=>({v:i.name,label:i.name,eq:i.equipped,sep:k===0})));
 
 /* ── 데이터 로드 ── */
-async function refreshState(){const s=await api("/api/state");const c=s.cli||{};$("cliDot").className="dot "+(c.found?(c.pipe==="connected"?"on":"off"):"");S.cliOk=c.found&&c.pipe==="connected";
+async function refreshState(){const s=await api("/api/state");
+  if(!s||!s.scores){$("cliDot").className="dot off";$("cliText").textContent="백엔드 응답 없음 — 앱을 다시 실행하세요";S.cliOk=false;if(!S.all.length)setTimeout(loadAll,5000);return s;}
+  const c=s.cli||{};$("cliDot").className="dot "+(c.found?(c.pipe==="connected"?"on":"off"):"");S.cliOk=c.found&&c.pipe==="connected";
   $("cliText").textContent=!c.found?"CLI 없음 — 설정에서 경로 지정 또는 인게임 토글":(c.pipe==="connected"?"CLI 연결됨":`CLI 끊김 ${c.reason||c.status_error||""}`);
   $("fetched").textContent=`악보 ${s.scores.count} · 악기 ${s.instruments.count} · 수신 ${fmtTs(s.scores.fetched_at)}`;return s;}
 async function loadAll(){const [sc,ls,ar,ins,st]=await Promise.all([api("/api/scores"),api("/api/playlists"),api("/api/artists"),api("/api/instruments"),api("/api/settings")]);
-  if(!sc||!sc.items||!ls||!ls.playlists||!ar||!ins||!ins.items||!st||!st.settings){toast("서버에서 데이터를 받지 못했습니다 — 백엔드 상태를 확인하세요 ("+((sc&&sc.message)||(ls&&ls.message)||"")+")");return;}
+  if(!sc||!sc.items||!ls||!ls.playlists||!ar||!ar.artists||!ins||!ins.items||!st||!st.settings){toast("서버에서 데이터를 받지 못했습니다 — 백엔드 상태를 확인하세요 ("+((sc&&sc.message)||(ls&&ls.message)||"")+")");return;}
   S.all=sc.items;S.byTitle=new Map(sc.items.map((i)=>[i.title,i]));S.summary={...sc.summary,artists:ar.artists,other:ar.other};S.lists=ls;S.instruments=ins.items;S.settings=st.settings;
   if(S.instrument&&!S.instruments.some((i)=>i.name===S.instrument))S.instrument="";$("instDd")._refresh&&$("instDd")._refresh();render();}
+async function listsApi(body){const r=await api("/api/playlists",body);if(r&&r.playlists){S.lists=r;}if(!r||r.ok===false){toast("재생목록 저장 실패: "+(r&&(r.message||r.error)||"서버 응답 없음"));}return r;}
 async function loadLog(){const d=await api("/api/log");S.logs=d.items;renderLog();}
 
 /* ── 렌더: 레일 ── */
 function refreshQueue(){ // 재생 중인 재생목록(src="pl:<id>")이 편집되면 큐도 그 목록을 따라간다 (삭제된 곡은 안 틀고, 순서·악기 변경 반영)
   if(!S.src||!S.src.startsWith("pl:"))return;const pl=S.lists.playlists.find((x)=>"pl:"+x.id===S.src);if(!pl)return;
   const cur=S.queue[S.qi];const q=pl.items.map((x)=>({title:x.title,inst:x.inst||""}));if(JSON.stringify(q)===JSON.stringify(S.queue))return;
-  S.queue=q;S.qi=cur?q.findIndex((x)=>x.title===cur.title):-1;if(S.qi<0&&cur){S.qi=Math.min(S.queue.length-1,Math.max(0,q.length?0:-1));}makeOrder();}
+  const oldQueue=S.queue,oldQi=S.qi;S.queue=q;S.qi=cur?q.findIndex((x)=>x.title===cur.title):-1;
+  if(S.qi<0&&cur){const nxt=oldQueue.slice(oldQi+1).find((x)=>q.some((y)=>y.title===x.title));S.qi=nxt?q.findIndex((x)=>x.title===nxt.title)-1:q.length-1;}   // 빠진 곡의 '다음 곡' 직전 위치 (-1 = 첫 곡 앞)
+  if(S.shuffle&&oldQueue.length===q.length&&oldQueue.every((x,i)=>x.title===q[i].title)){return;}   // 악기만 바뀐 편집이면 셔플 순서 유지
+  makeOrder();}
 function render(){refreshQueue();renderTree();renderMid();renderSel();renderQueue();}
 function renderTree(){
   const {folders,playlists}=S.lists,v=S.view,el=$("tree");
@@ -332,7 +338,7 @@ function bindBulk(items){const sel=()=>items.filter((i)=>S.selected.has(i.title)
   const titles=()=>sel().map((it)=>it.title);
   if($("bAdd"))$("bAdd").onclick=(e)=>addMenu(e,titles());if($("bNew"))$("bNew").onclick=()=>newList(null,titles());
   if($("bAssign"))$("bAssign").onclick=(e)=>assignMenu(e,titles());if($("bUnassign"))$("bUnassign").onclick=async()=>{await api("/api/artists",{op:"unassign",titles:titles()});S.selected.clear();await loadAll();};
-  if($("bRemove"))$("bRemove").onclick=async()=>{S.lists=await api("/api/playlists",{op:"remove",id:S.view.id,titles:titles()});S.selected.clear();render();};
+  if($("bRemove"))$("bRemove").onclick=async()=>{await listsApi({op:"remove",id:S.view.id,titles:titles()});S.selected.clear();render();};
 }
 function rowHtml(it,i){const playing=S.now&&S.now.title===it.title&&S.playing;
   return `<div class="row ${S.sel===it.title?"sel":""}" data-t="${esc(it.title)}" title="더블클릭: 재생"><input type="checkbox" data-ck="${esc(it.title)}" aria-label="선택" ${S.selected.has(it.title)?"checked":""}><span class="no">${i+1}</span>
@@ -350,7 +356,7 @@ function bindRows(items){const M=$("mid");
 }
 function rowMenu(e,title){const it=S.byTitle.get(title);const items=[[it?(it.song||it.cleaned):title,null],["▶ 재생",()=>playFrom([{title,inst:""}],0,"single")],["재생목록에 담기…",()=>addMenu(e,[title])],["아티스트 지정…",()=>assignMenu(e,[title])]];
   if(it&&it.artist&&it.song)items.push([`뒤집기: 「${it.song}」 → 아티스트로`,async()=>{await api("/api/artists",{op:"assign",titles:[title],name:it.song});await loadAll();}]);
-  if(S.view.kind==="pl")items.push(["이 목록에서 제거",async()=>{S.lists=await api("/api/playlists",{op:"remove",id:S.view.id,titles:[title]});render();}]);
+  if(S.view.kind==="pl")items.push(["이 목록에서 제거",async()=>{await listsApi({op:"remove",id:S.view.id,titles:[title]});render();}]);
   menu(e,items);}
 
 /* ── 재생목록 뷰 ── */
@@ -365,10 +371,10 @@ function renderPlHead(pl,items){
     <div style="display:flex;align-items:center;gap:6px;padding:8px 12px;border-bottom:1px solid var(--line2);font-size:12px;flex-wrap:wrap"><span style="color:var(--muted)" title="곡마다 악기를 따로 지정할 수 있고, 아래 버튼으로 전체를 한 번에 바꿉니다">이 목록 악기 · 일괄</span><button class="small ghost" data-pi="">모두 그대로</button>${S.instruments.filter((i)=>i.equipped).map((i)=>`<button class="small ghost" data-pi="${esc(i.name)}">모두 ${esc(i.name)}</button>`).join("")}
       <span style="width:1px;height:14px;background:var(--line);margin:0 4px"></span><span style="color:var(--muted)">곡 사이 대기</span><span class="chip" style="cursor:default"><span class="num">${s.gap_sec??2}</span>초</span>
       <span class="grow"></span><button class="small ghost" id="plSortT" title="목록 순서를 제목순으로 바꿔 저장">제목순 정렬</button><button class="small ghost" id="plSortA" title="목록 순서를 아티스트순으로 바꿔 저장">아티스트순 정렬</button><button class="small ghost" id="plExport" title="JSON 으로 클립보드에 복사">내보내기</button></div><div id="bulkBox"></div>`;
-  $("plName").onclick=()=>renamePl(pl.id);$("plMemo").onclick=async()=>{const m=await ask("메모",pl.memo||"");if(m===null)return;S.lists=await api("/api/playlists",{op:"memo",id:pl.id,memo:m});render();};
+  $("plName").onclick=()=>renamePl(pl.id);$("plMemo").onclick=async()=>{const m=await ask("메모",pl.memo||"");if(m===null)return;await listsApi({op:"memo",id:pl.id,memo:m});render();};
   $("btnPlayAll").onclick=()=>playFrom(pl.items.map((it)=>({...it})),0,"pl:"+pl.id);$("plShuffle").onclick=()=>toggleShuffle();$("plRepeat").onclick=()=>cycleRepeat();$("plMore").onclick=(e)=>plMenu(e,pl.id);
-  $("midHead").querySelectorAll("[data-pi]").forEach((n)=>n.onclick=async()=>{S.lists=await api("/api/playlists",{op:"set_inst",id:pl.id,inst:n.dataset.pi});render();});
-  const sortPl=async(key,label)=>{if(!confirm(`이 목록의 순서를 ${label}으로 바꿔 저장할까요? (되돌릴 수 없습니다)`))return;const sorted=[...items].sort((a,b)=>(a[key]||"힣").localeCompare(b[key]||"힣","ko"));S.lists=await api("/api/playlists",{op:"reorder",id:pl.id,items:sorted.map((i)=>i.title)});render();};
+  $("midHead").querySelectorAll("[data-pi]").forEach((n)=>n.onclick=async()=>{await listsApi({op:"set_inst",id:pl.id,inst:n.dataset.pi});render();});
+  const sortPl=async(key,label)=>{if(!confirm(`이 목록의 순서를 ${label}으로 바꿔 저장할까요? (되돌릴 수 없습니다)`))return;const sorted=[...items].sort((a,b)=>(a[key]||"힣").localeCompare(b[key]||"힣","ko"));await listsApi({op:"reorder",id:pl.id,items:sorted.map((i)=>i.title)});render();};
   $("plSortT").onclick=()=>sortPl("song","제목순");$("plSortA").onclick=()=>sortPl("artist","아티스트순");
   $("plExport").onclick=async()=>{const txt=JSON.stringify({name:pl.name,memo:pl.memo,items:pl.items},null,1);try{await navigator.clipboard.writeText(txt);alert("클립보드에 JSON으로 복사했습니다");}catch{prompt("복사:",txt);}};
 }
@@ -380,15 +386,15 @@ function renderPlRows(pl,items){
       <span class="acts"><button class="ic pri" data-play="${esc(it.title)}" title="재생">${ICON("play","s")}</button><button class="ic dim" data-more="${esc(it.title)}" title="더 보기">${ICON("more","s")}</button><button class="ic dim" data-rm="${esc(it.title)}" title="목록에서 제거">${ICON("x","s")}</button></span></div>`;}).join(""):`<div class="empty">비어 있음 — 전체 악보에서 + 로 담으세요</div>`)+
     `<div class="note" style="padding:8px 10px">핸들을 끌어 순서 변경 · 악기는 곡마다 다르게 지정할 수 있습니다.</div>`;
   bindRows(items);renderBulk(items);
-  $("mid").querySelectorAll("[data-rm]").forEach((b)=>b.onclick=async()=>{S.lists=await api("/api/playlists",{op:"remove",id:pl.id,titles:[b.dataset.rm]});render();});
-  $("mid").querySelectorAll("[data-inst-of]").forEach((el)=>{const t=el.dataset.instOf;ddMake(el,()=>[{v:"",label:"그대로"}].concat(S.instruments.map((i,k)=>({v:i.name,label:i.name,eq:i.equipped,sep:k===0}))),()=>{const P=S.lists.playlists.find((x)=>x.id===pl.id)||pl;return (P.items.find((x)=>x.title===t)||{}).inst||"";},async(v)=>{S.lists=await api("/api/playlists",{op:"set_inst",id:pl.id,title:t,inst:v});refreshQueue();renderQueue();});el.querySelector(".dd-btn").style.padding="4px 8px";el.querySelector(".dd-btn").style.fontSize="12px";});
+  $("mid").querySelectorAll("[data-rm]").forEach((b)=>b.onclick=async()=>{await listsApi({op:"remove",id:pl.id,titles:[b.dataset.rm]});render();});
+  $("mid").querySelectorAll("[data-inst-of]").forEach((el)=>{const t=el.dataset.instOf;ddMake(el,()=>[{v:"",label:"그대로"}].concat(S.instruments.map((i,k)=>({v:i.name,label:i.name,eq:i.equipped,sep:k===0}))),()=>{const P=S.lists.playlists.find((x)=>x.id===pl.id)||pl;return (P.items.find((x)=>x.title===t)||{}).inst||"";},async(v)=>{await listsApi({op:"set_inst",id:pl.id,title:t,inst:v});refreshQueue();renderQueue();});el.querySelector(".dd-btn").style.padding="4px 8px";el.querySelector(".dd-btn").style.fontSize="12px";});
   $("ckAll").onchange=()=>{S.selected=new Set($("ckAll").checked?items.map((i)=>i.title):[]);renderMid();};
   // 드래그 순서 변경
   let drag=null;$("mid").querySelectorAll(".row.pl[draggable]").forEach((r)=>{r.ondragstart=(e)=>{drag=r;r.classList.add("dragging");e.dataTransfer.effectAllowed="move";};r.ondragend=()=>{r.classList.remove("dragging");$("mid").querySelectorAll(".over").forEach((x)=>x.classList.remove("over","after"));};
     r.ondragover=(e)=>{e.preventDefault();if(drag&&drag!==r){$("mid").querySelectorAll(".over").forEach((x)=>x.classList.remove("over","after"));r.classList.add("over");if(Number(drag.dataset.i)<Number(r.dataset.i))r.classList.add("after");}};
-    r.ondrop=async(e)=>{e.preventDefault();if(!drag||drag===r)return;const order=[...$("mid").querySelectorAll(".row.pl[draggable]")].map((x)=>x.dataset.t);const from=order.indexOf(drag.dataset.t),to=order.indexOf(r.dataset.t);order.splice(to,0,order.splice(from,1)[0]);S.lists=await api("/api/playlists",{op:"reorder",id:pl.id,items:order});render();};});
+    r.ondrop=async(e)=>{e.preventDefault();if(!drag||drag===r)return;const order=[...$("mid").querySelectorAll(".row.pl[draggable]")].map((x)=>x.dataset.t);const from=order.indexOf(drag.dataset.t),to=order.indexOf(r.dataset.t);order.splice(to,0,order.splice(from,1)[0]);await listsApi({op:"reorder",id:pl.id,items:order});render();};});
 }
-function plMenu(e,id){const pl=S.lists.playlists.find((p)=>p.id===id);menu(e,[[pl.name,null],["▶ 전체 재생",()=>playFrom(pl.items.map((it)=>({...it})),0,"pl:"+id)],["이름 변경",()=>renamePl(id)],["폴더로 이동",()=>movePl(id)],["메모",async()=>{const m=await ask("메모",pl.memo||"");if(m===null)return;S.lists=await api("/api/playlists",{op:"memo",id,memo:m});render();}],["삭제",()=>delPl(id)]]);}
+function plMenu(e,id){const pl=S.lists.playlists.find((p)=>p.id===id);menu(e,[[pl.name,null],["▶ 전체 재생",()=>playFrom(pl.items.map((it)=>({...it})),0,"pl:"+id)],["이름 변경",()=>renamePl(id)],["폴더로 이동",()=>movePl(id)],["메모",async()=>{const m=await ask("메모",pl.memo||"");if(m===null)return;await listsApi({op:"memo",id,memo:m});render();}],["삭제",()=>delPl(id)]]);}
 
 /* ── 선택 카드 ── */
 function renderSel(){const it=S.sel?S.byTitle.get(S.sel):null;const pos=it&&S._items?S._items.findIndex((x)=>x.title===it.title):-1;$("selMeta").textContent=pos>=0?`${pos+1} / ${S._items.length}`:"";
@@ -409,20 +415,21 @@ function qOrder(){return S.order.length?S.order:S.queue.map((_,i)=>i);}
 function qPos(){return qOrder().indexOf(S.qi);}
 function makeOrder(){const idx=S.queue.map((_,i)=>i);if(!S.shuffle){S.order=idx;return;}const cur=S.qi;const rest=idx.filter((i)=>i!==cur);for(let i=rest.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[rest[i],rest[j]]=[rest[j],rest[i]];}S.order=cur>=0?[cur,...rest]:rest;}
 async function playFrom(list,index,src){if(S.switching||!list.length||index<0)return;S.queue=list.map((x)=>({title:x.title,inst:x.inst||""}));S.qi=index;S.src=src;makeOrder();await playIndex(index);}
-async function playIndex(i){if(S.switching)return;clearTimeout(S.gapT);const it=S.queue[i];if(!it)return;S.switching=true;S.gen=(S.gen||0)+1;S.qi=i;S.manualStop=false;try{
+async function playIndex(i){if(S.switching)return;clearTimeout(S.gapT);S.gapT=null;const it=S.queue[i];if(!it)return;S.switching=true;S.gen=(S.gen||0)+1;S.qi=i;S.manualStop=false;try{
   const lib=S.byTitle.get(it.title);S.now={title:it.title,inst:it.inst||S.instrument||"",song:lib?(lib.song||lib.cleaned):it.title,artist:lib?lib.artist:""};
   $("nowTitle").textContent=S.now.song;$("nowSub").textContent="전송 중…";$("prog").style.width="0%";$("tEl").textContent="0:00";$("tTot").textContent=(lib&&lib.duration)?fmtSec(lib.duration):"0:00";
   const r=await api("/api/play",{title:it.title,instrument:it.inst||S.instrument||null});
   S.playing=r.ok;S.startedAt=Date.now();S.lastRemain=null;
   if(!r.ok){const err=r.error||r.steps?.at(-1)?.error||"",msg=r.message||r.steps?.at(-1)?.message||"";
-    $("nowSub").textContent="실패: "+err+" "+msg;loadLog();clearInterval(S.pollT);S.pollT=null;setMain(false);
+    $("nowSub").textContent="실패: "+errText(err,msg);loadLog();clearInterval(S.pollT);S.pollT=null;setMain(false);
     S.failRun=(S.failRun||0)+1;
     const fatal=["cli_not_found","disconnected","game_off","option_off","timeout","spawn_failed","network","forbidden"].includes(err);
-    if(fatal||S.failRun>Math.min(3,S.queue.length)){S.failRun=0;$("nowSub").textContent="재생 실패: "+err+" "+msg;renderQueue();return;}
+    if(fatal||S.failRun>Math.min(3,S.queue.length)){S.failRun=0;$("nowSub").textContent="재생 실패: "+errText(err,msg);renderQueue();return;}
     if(S.queue.length>1){S.gapT=setTimeout(()=>advance(1),1500);}return;}
   S.failRun=0;setMain(true);startPoll();loadLog();renderMid();renderQueue();renderTree();}finally{S.switching=false;}}
 function setMain(playing){$("mainIcon").innerHTML=`<use href="#ic-${playing?"stop":"play"}"/>`;$("nowBadge").hidden=!playing;}
-function fmtSecSafe(v){return v&&isFinite(v)?fmtSec(v):"0:00";}
+const ERRK={not_found:"보관함에 없음",invalid_state:"게임이 준비되지 않음",cli_not_found:"CLI 없음",disconnected:"게임 연결 끊김",game_off:"게임 꺼짐",timeout:"응답 시간 초과",network:"서버 연결 실패",forbidden:"요청이 거부됨",empty_title:"제목 없음",internal:"서버 오류"};
+const errText=(e,m)=>((ERRK[e]||e||"")+(m?" · "+m:"")).trim();
 function startPoll(){clearInterval(S.pollT);S.pollT=setInterval(pollAct,1000);}
 async function advance(dir){ // dir=+1 다음, -1 이전, 0 자동(다음)
   if(S.advancing||S.switching)return;S.advancing=true;clearTimeout(S.gapT);S.gapT=null;
@@ -431,7 +438,7 @@ async function advance(dir){ // dir=+1 다음, -1 이전, 0 자동(다음)
     pos+=dir===0?1:dir;
     if(pos>=ord.length){
       if(S.repeat==="all"){if(S.shuffle){S.qi=-1;makeOrder();ord=qOrder();}pos=0;}
-      else{if(S.playing){S.manualStop=true;await api("/api/stop",{});}await stopAll("재생목록 끝");S.qi=ord[0]??-1;renderQueue();return;}}
+      else{if(S.playing){S.manualStop=true;await api("/api/stop",{});}await stopAll(S.src.startsWith("pl:")?"재생목록 끝":"재생 끝");S.qi=ord[0]??-1;renderQueue();return;}}
     if(pos<0)pos=S.repeat==="all"?ord.length-1:0;
     await playIndex(ord[pos]);}
   finally{S.advancing=false;}}
@@ -441,7 +448,8 @@ async function pollAct(){
   if(S.switching||pollBusy)return;pollBusy=true;
   try{
   if(!S.playing&&!S.gapT){clearInterval(S.pollT);S.pollT=null;return;}   // 볼 게 없으면 폴링 종료 (CLI 호출 낭비 방지)
-  const gen=S.gen;const a=await api("/api/activity");if(S.switching||gen!==S.gen)return;
+  if(!S.playing)return;   // 곡 사이 대기 중엔 CLI 를 부르지 않는다
+  const gen=S.gen;const a=await api("/api/activity");if(S.switching||gen!==S.gen||!S.pollT)return;
   if(!a||!a.ok||!a.body||typeof a.body.Performance!=="object"){S.pollErr=(S.pollErr||0)+1;if(S.pollErr>=5){S.pollErr=0;await stopAll("CLI 응답 없음 — 재생 감시를 멈췄습니다");}return;}
   S.pollErr=0;const p=a.body.Performance||{};const s=S.settings;const sinceStart=(Date.now()-S.startedAt)/1000;
   if(p.IsPlaying){const cached=(S.byTitle.get(S.now?.title)||{}).duration||0;const tot=p.TotalDurationSeconds||cached||0,el=p.ElapsedSeconds||0;
@@ -449,7 +457,7 @@ async function pollAct(){
     const localEl=(Date.now()-S.startedAt)/1000;S.lastRemain=tot?tot-el:null;
     $("nowSub").textContent=`${p.InstrumentName||""}${p.IsLoop?" · 반복 설정":""}${S.src.startsWith("pl:")?` · ${qPos()+1}/${S.queue.length}`:""}`;
     $("tEl").textContent=fmtSec(el);$("tTot").textContent=fmtSec(tot);$("prog").style.width=(tot?Math.min(100,el/tot*100):0)+"%";
-    if(S.playing&&tot&&!S.advancing&&((tot-el)<=(s.advance_margin??2)||localEl>=tot-1)){
+    if(S.playing&&S.qi>=0&&tot&&!S.advancing&&((tot-el)<=(s.advance_margin??2)||localEl>=tot-1)){
       const r=await api("/api/stop",{});if(gen!==S.gen||S.manualStop||!S.pollT)return;   // 그 사이 사용자가 정지했으면 그만
       S.playing=false;const gap=(s.gap_sec??2)*1000;$("nowSub").textContent=`다음 곡까지 ${s.gap_sec??2}초…`;clearTimeout(S.gapT);S.gapT=setTimeout(()=>advance(0),gap);}
   }else if(S.playing){if(sinceStart<2.5)return;S.playing=false;if(S.manualStop){stopAll("정지됨");return;}
@@ -461,8 +469,8 @@ $("btnMain").onclick=async()=>{if(S.switching)return;
   if(S.playing||S.gapT){S.manualStop=true;clearTimeout(S.gapT);S.gapT=null;S.gen=(S.gen||0)+1;const r=S.playing?await api("/api/stop",{}):{ok:true};loadLog();
     if(r.ok){await stopAll("정지됨");}else{S.manualStop=false;$("nowSub").textContent="정지 실패 — 잠시 후 다시: "+(r.message||r.error||"");}}
   else if(S.qi>=0&&S.queue[S.qi]){await playIndex(S.qi);}else if(S.sel){playFrom([{title:S.sel,inst:""}],0,"single");}};
-$("btnNext").onclick=()=>{if(!S.queue.length||S.switching||S.advancing)return;clearTimeout(S.gapT);advance(1);};
-$("btnPrev").onclick=async()=>{if(!S.queue.length||S.switching||S.advancing)return;clearTimeout(S.gapT);const el=(Date.now()-S.startedAt)/1000;if(S.playing&&el>4){await playIndex(S.qi);}else advance(-1);};
+$("btnNext").onclick=()=>{if(!S.queue.length||S.switching||S.advancing)return;clearTimeout(S.gapT);S.gapT=null;advance(1);};
+$("btnPrev").onclick=async()=>{if(!S.queue.length||S.switching||S.advancing)return;clearTimeout(S.gapT);S.gapT=null;const el=(Date.now()-S.startedAt)/1000;if(S.playing&&el>4){await playIndex(S.qi);}else advance(-1);};
 function toggleShuffle(){S.shuffle=!S.shuffle;makeOrder();$("btnShuffle").classList.toggle("on",S.shuffle);renderQueue();if(S.view.kind==="pl")renderMid();}
 function cycleRepeat(){S.repeat=S.repeat==="off"?"all":S.repeat==="all"?"one":"off";$("btnRepeat").classList.toggle("on",S.repeat!=="off");$("rep1").hidden=S.repeat!=="one";$("btnRepeat").title="반복: "+{off:"끔",all:"전체",one:"한 곡"}[S.repeat];renderQueue();if(S.view.kind==="pl")renderMid();}
 $("btnShuffle").onclick=toggleShuffle;$("btnRepeat").onclick=cycleRepeat;
@@ -473,7 +481,7 @@ function renderQueue(){const ord=qOrder(),pos=qPos();const up=ord.slice(pos+1).m
   const now=S.queue[S.qi];const lib=(t)=>S.byTitle.get(t)||{};
   $("queueBody").innerHTML=(now?`<div style="padding:9px 11px;border-radius:9px;border:1px solid var(--goldline);background:rgba(226,184,102,.08);margin-bottom:6px"><div style="font-size:11px;color:var(--gold);letter-spacing:.08em">${S.playing?"재생 중":"현재"}</div><div style="font-weight:700;color:var(--strong)">${esc(lib(now.title).song||now.title)}</div><div style="font-size:11.5px;color:var(--ink2)">${esc(lib(now.title).artist||"")}${now.inst?" · "+esc(now.inst):" · 악기 그대로"}</div></div>`:"")+
     (up.length?up.slice(0,30).map((it,k)=>`<div style="display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:center;padding:6px 9px;border-radius:8px;border:1px solid var(--line2);margin-bottom:4px;cursor:pointer" data-qj="${ord[pos+1+k]}"><span class="num" style="font-size:11px;color:var(--faint);width:16px">${k+1}</span><div style="min-width:0"><div style="font-size:12.5px;color:var(--ink);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(lib(it.title).song||it.title)}</div><div style="font-size:11px;color:var(--muted)">${esc(lib(it.title).artist||"")}${it.inst?" · "+esc(it.inst):""}</div></div><span class="num" style="font-size:11px;color:var(--muted)">${lib(it.title).duration?fmtSec(lib(it.title).duration):""}</span></div>`).join("")+(up.length>30?`<div class="note" style="text-align:center">+ ${up.length-30}곡</div>`:""):`<div class="note" style="padding:4px 2px">다음 곡 없음</div>`);
-  $("queueBody").querySelectorAll("[data-qj]").forEach((n)=>n.onclick=()=>{if(S.switching)return;clearTimeout(S.gapT);playIndex(Number(n.dataset.qj));});}
+  $("queueBody").querySelectorAll("[data-qj]").forEach((n)=>n.onclick=()=>{if(S.switching)return;clearTimeout(S.gapT);S.gapT=null;playIndex(Number(n.dataset.qj));});}
 
 /* ── CLI 로그 ── */
 function renderLog(){const L=S.logs||[];$("logMeta").textContent=L.length?`최근 ${Math.min(L.length,40)}건`:"";
@@ -495,14 +503,14 @@ function artistMenu(e,key){const a=(S.summary.artists||[]).find((x)=>x.key===key
     ["별칭 추가",async()=>{if(!a.manual){alert("먼저 정식 아티스트로 등록하세요");return;}const al=await ask(`「${a.name}」의 별칭 (예: IU, 방탄소년단)`);if(!al)return;await api("/api/artists",{op:"alias",id:key,alias:al});await loadAll();}],
     ["다른 아티스트에 합치기",()=>{const targets=(S.summary.artists||[]).filter((x)=>x.manual&&x.key!==key);if(!targets.length){alert("합칠 정식 아티스트가 없습니다 (먼저 하나를 등록하세요)");return;}menu(e,[[`「${a.name}」 → 다음 아티스트로`,null]].concat(targets.map((t)=>[`★ ${t.name}`,async()=>{if(a.manual)await api("/api/artists",{op:"merge",from:key,into:t.key});else{await api("/api/artists",{op:"assign",titles:await titlesOf(),id:t.key});await api("/api/artists",{op:"alias",id:t.key,alias:a.name});}if(S.view.kind==="artist")S.view={kind:"artist",key:t.key};await loadAll();}])));}],
     ...(a.manual?[["삭제(지정 해제)",async()=>{if(!confirm(`「${a.name}」 등록을 지우고 지정을 해제할까요?`))return;await api("/api/artists",{op:"delete",id:key});if(S.view.kind==="artist")S.view={kind:"lib"};await loadAll();}]]:[])]);}
-function addMenu(e,titles){const pls=S.lists.playlists;menu(e,[[`${titles.length}곡 담기`,null]].concat(pls.map((p)=>[`♪ ${p.name} (${p.items.length})`,async()=>{S.lists=await api("/api/playlists",{op:"add",id:p.id,titles});S.selected.clear();render();}])).concat([["+ 새 재생목록에",()=>newList(null,titles)]]));}
-async function newList(folder=null,titles=[]){const name=await ask("재생목록 이름","새 재생목록");if(name===null)return;S.lists=await api("/api/playlists",{op:"create",name,folder});const pl=S.lists.playlists.at(-1);if(titles.length)S.lists=await api("/api/playlists",{op:"add",id:pl.id,titles});S.selected.clear();setView({kind:"pl",id:pl.id});}
-async function newFolder(parent=null){const name=await ask("폴더 이름","새 폴더");if(name===null)return;S.lists=await api("/api/playlists",{op:"folder_create",name,parent});renderTree();}
-async function renamePl(id){const pl=S.lists.playlists.find((p)=>p.id===id);const name=await ask("이름 변경",pl.name);if(name===null)return;S.lists=await api("/api/playlists",{op:"rename",id,name});render();}
-async function renameFolder(id){const f=S.lists.folders.find((x)=>x.id===id);const name=await ask("폴더 이름",f.name);if(name===null)return;S.lists=await api("/api/playlists",{op:"folder_rename",id,name});renderTree();}
-async function delPl(id){if(!confirm("이 재생목록을 삭제할까요?"))return;S.lists=await api("/api/playlists",{op:"delete",id});if(S.view.kind==="pl"&&S.view.id===id)S.view={kind:"lib"};render();}
-async function delFolder(id){if(!confirm("폴더를 삭제할까요? (안의 목록은 상위로 옮겨집니다)"))return;S.lists=await api("/api/playlists",{op:"folder_delete",id});renderTree();}
-function movePl(id){menu({clientX:280,clientY:140},[["(폴더 없음)",async()=>{S.lists=await api("/api/playlists",{op:"move",id,folder:null});render();}]].concat(S.lists.folders.map((f)=>[f.name,async()=>{S.lists=await api("/api/playlists",{op:"move",id,folder:f.id});render();}])));}
+function addMenu(e,titles){const pls=S.lists.playlists;menu(e,[[`${titles.length}곡 담기`,null]].concat(pls.map((p)=>[`♪ ${p.name} (${p.items.length})`,async()=>{await listsApi({op:"add",id:p.id,titles});S.selected.clear();render();}])).concat([["+ 새 재생목록에",()=>newList(null,titles)]]));}
+async function newList(folder=null,titles=[]){const name=await ask("재생목록 이름","새 재생목록");if(name===null)return;await listsApi({op:"create",name,folder});const pl=S.lists.playlists.at(-1);if(titles.length)await listsApi({op:"add",id:pl.id,titles});S.selected.clear();setView({kind:"pl",id:pl.id});}
+async function newFolder(parent=null){const name=await ask("폴더 이름","새 폴더");if(name===null)return;await listsApi({op:"folder_create",name,parent});renderTree();}
+async function renamePl(id){const pl=S.lists.playlists.find((p)=>p.id===id);const name=await ask("이름 변경",pl.name);if(name===null)return;await listsApi({op:"rename",id,name});render();}
+async function renameFolder(id){const f=S.lists.folders.find((x)=>x.id===id);const name=await ask("폴더 이름",f.name);if(name===null)return;await listsApi({op:"folder_rename",id,name});renderTree();}
+async function delPl(id){if(!confirm("이 재생목록을 삭제할까요?"))return;await listsApi({op:"delete",id});if(S.view.kind==="pl"&&S.view.id===id)S.view={kind:"lib"};render();}
+async function delFolder(id){if(!confirm("폴더를 삭제할까요? (안의 목록은 상위로 옮겨집니다)"))return;await listsApi({op:"folder_delete",id});renderTree();}
+function movePl(id){menu({clientX:280,clientY:140},[["(폴더 없음)",async()=>{await listsApi({op:"move",id,folder:null});render();}]].concat(S.lists.folders.map((f)=>[f.name,async()=>{await listsApi({op:"move",id,folder:f.id});render();}])));}
 $("btnNewList").onclick=()=>newList(null);$("btnNewFolder").onclick=()=>newFolder(null);
 
 /* ── 갱신·보고·설정 ── */

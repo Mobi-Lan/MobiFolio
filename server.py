@@ -115,6 +115,22 @@ def _note(r, summary: str = "") -> None:
         print(f"[log] 저장 실패: {e}", flush=True)
 
 
+_build_memo: dict = {"key": None, "items": None}
+
+
+def _build_items() -> list:
+    """lib.build 는 193곡 기준 수 ms 지만 요청마다 다시 도는 것을 막는다 (같은 캐시·같은 아티스트 상태면 재사용)."""
+    sc = store.get_cache("scores")
+    art = store.get_artists()
+    key = (sc["fetched_at"], len(sc["items"]), json.dumps(art, sort_keys=True, ensure_ascii=False))
+    with store.LOCK:
+        if _build_memo["key"] == key and _build_memo["items"] is not None:
+            return _build_memo["items"]
+        items = lib.build(sc["items"], art)
+        _build_memo["key"], _build_memo["items"] = key, items
+        return items
+
+
 def _s(v, default: str = "") -> str:
     """문자열 강제 (None/숫자/딕셔너리가 와도 .strip() 에서 죽지 않게)."""
     return v.strip() if isinstance(v, str) else (str(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else default)
@@ -132,7 +148,6 @@ def _json(handler, obj, status=200):
     handler.send_response(status)
     handler.send_header("Content-Type", "application/json; charset=utf-8")
     handler.send_header("Content-Length", str(len(data)))
-    handler.send_header("Cache-Control", "no-store")
     handler.end_headers()
     handler.wfile.write(data)
 
@@ -145,6 +160,13 @@ def _read_json(handler) -> dict:
     if n <= 0:
         return {}
     if n > MAX_BODY:
+        left = min(n, 8 * MAX_BODY)   # 상한까지만 비우고 답한다 (그 이상은 연결을 닫는다)
+        while left > 0:
+            chunk = handler.rfile.read(min(65536, left))
+            if not chunk:
+                break
+            left -= len(chunk)
+        handler.close_connection = True
         return {"_error": "too_large"}
     raw = handler.rfile.read(n)
     for enc in ("utf-8", "mbcs"):   # 브라우저는 utf-8. 콘솔 도구가 cp949 로 보내도 조용히 빈 값이 되지 않게
@@ -202,6 +224,11 @@ def sync() -> dict:
 
 # ── 재생목록 ──
 def lists_op(op: str, p: dict) -> dict:
+    with store.LOCK:   # 읽고-고쳐-쓰기 전체를 잠가 동시 요청이 서로의 변경을 덮어쓰지 않게
+        return _lists_op(op, p)
+
+
+def _lists_op(op: str, p: dict) -> dict:
     d = store.get_lists()
     pls, fds = d["playlists"], d["folders"]
     now = time.time()
@@ -280,6 +307,11 @@ def lists_op(op: str, p: dict) -> dict:
 
 # ── 아티스트 사전·수동 지정 ──
 def artists_op(op: str, p: dict) -> dict:
+    with store.LOCK:
+        return _artists_op(op, p)
+
+
+def _artists_op(op: str, p: dict) -> dict:
     d = store.get_artists()
     arts = d["artists"]
     by_id = {a["id"]: a for a in arts}
@@ -308,7 +340,7 @@ def artists_op(op: str, p: dict) -> dict:
         al = _s(p.get("alias"))[:200]
         if not a:
             return {"ok": False, "error": "not_found"}
-        if al and al not in a["aliases"]:
+        if al and al not in a["aliases"] and lib.norm(al) != lib.norm(a["name"]):
             a["aliases"].append(al)
     elif op == "merge":   # from → into : from 의 이름은 into 의 별칭으로, 지정도 옮긴다
         src, dst = by_id.get(p.get("from")), by_id.get(p.get("into"))
@@ -441,14 +473,14 @@ class H(SimpleHTTPRequestHandler):
         u = urlparse(self.path)
         q = {k: v[0] for k, v in parse_qs(u.query).items()}
         if u.path == "/api/health":   # 일렉트론 셸이 "이 포트가 정말 모비폴리오인지" 확인하는 용도
-            return _json(self, {"app": "mobifolio", "version": VERSION, "pid": os.getpid(), "data_dir": store.DATA_DIR, "frozen": FROZEN,
+            return _json(self, {"app": "mobifolio", "version": VERSION, "pid": os.getpid(), "frozen": FROZEN,
                                 "parent": int(PARENT) if PARENT.isdigit() else None})
         if u.path == "/api/state":
             sc, ins = store.get_cache("scores"), store.get_cache("instruments")
             return _json(self, {"cli": _probe(), "scores": {"fetched_at": sc["fetched_at"], "count": len(sc["items"])},
                                 "instruments": {"fetched_at": ins["fetched_at"], "count": len(ins["items"])}})
         if u.path == "/api/scores":
-            items = lib.build(store.get_cache("scores")["items"], store.get_artists())
+            items = [dict(it) for it in _build_items()]
             dur = store.get_durations(); rec = {x["title"]: x["ts"] for x in store.get_recent()}
             for it in items:
                 it["duration"] = dur.get(it["title"]); it["lastPlayed"] = rec.get(it["title"])
@@ -465,12 +497,12 @@ class H(SimpleHTTPRequestHandler):
                 found = [it for it in found if it["bucket"] == q["bucket"]]
             return _json(self, {"items": found, "summary": lib.summary(items)})
         if u.path == "/api/artists":
-            items = lib.build(store.get_cache("scores")["items"], store.get_artists())
+            items = _build_items()
             return _json(self, {"artists": lib.artists_summary(items), "other": sum(1 for it in items if it["bucket"] == "other"),
                                 "state": store.get_artists()})
         if u.path == "/api/normalize":
             # 정규화 검토용: 제목 → 정리·분리·규칙 을 전부 보여 준다
-            items = lib.build(store.get_cache("scores")["items"], store.get_artists())
+            items = _build_items()
             return _json(self, {"summary": lib.summary(items),
                                 "rows": [{k: it[k] for k in ("title", "cleaned", "removed", "tags", "variant", "artist", "song", "rule", "bucket")} for it in items]})
         if u.path == "/api/instruments":
@@ -482,8 +514,12 @@ class H(SimpleHTTPRequestHandler):
                 return _json(self, {"ok": False, "error": "forbidden"}, 403)
             return _json(self, _activity())
         if u.path == "/api/log":
+            if not self._guard():
+                return _json(self, {"ok": False, "error": "forbidden"}, 403)
             return _json(self, {"items": _log[:40]})
         if u.path == "/api/settings":
+            if not self._guard():
+                return _json(self, {"ok": False, "error": "forbidden"}, 403)
             return _json(self, {"settings": store.get_settings(), "cli": _probe()})
         if u.path.startswith("/api/cli/"):
             # 읽기 전용 명령 디버그 통로 (필드 모양 확인용). 실행 명령은 막고, 다른 사이트의 <img>/fetch 로는 못 부르게 출처 검사
@@ -555,7 +591,7 @@ class H(SimpleHTTPRequestHandler):
         except Exception as e:   # 어떤 입력에도 연결을 끊지 않고 JSON 으로 답한다
             import traceback; traceback.print_exc()
             try:
-                _json(self, {"ok": False, "error": "internal", "message": f"{type(e).__name__}: {e}"}, 500)
+                _json(self, {"ok": False, "error": "internal", "message": type(e).__name__}, 500)
             except Exception:
                 pass
 
@@ -655,6 +691,26 @@ _open_browser = _open_window   # 이전 이름 호환
 class _Server(ThreadingHTTPServer):
     allow_reuse_address = False   # 같은 사용자의 다른 프로세스가 포트를 가로채지 못하게 (SO_REUSEADDR 끔 + 배타 사용)
     daemon_threads = True
+    _slots = threading.BoundedSemaphore(32)   # 동시 연결 상한 — 느린 연결로 스레드를 무한히 잡아 두지 못하게
+
+    def process_request(self, request, client_address):
+        if not self._slots.acquire(blocking=False):
+            try:
+                request.close()
+            except OSError:
+                pass
+            return
+        try:
+            super().process_request(request, client_address)
+        except Exception:
+            self._slots.release()
+            raise
+
+    def process_request_thread(self, request, client_address):
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self._slots.release()
 
     def server_bind(self):
         if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):

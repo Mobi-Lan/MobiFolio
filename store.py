@@ -122,6 +122,8 @@ def migrate_legacy(candidates: list) -> list:
         return []
     os.makedirs(DATA_DIR, exist_ok=True)
     for name, docs in found.items():
+        if os.path.isfile(_path(name)):   # 새 위치에 이미 있는 파일(캐시)은 예전 것으로 덮지 않는다
+            continue
         merged = _merge(name, docs)
         if merged is not None:
             save(name, merged)
@@ -229,6 +231,8 @@ def _coerce(k: str, v):
             return v.strip().lower() in ("1", "true", "yes", "on")
         return None
     if isinstance(d, (int, float)):
+        if isinstance(v, bool):
+            return None
         try:
             x = float(v)
         except (TypeError, ValueError):

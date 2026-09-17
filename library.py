@@ -254,7 +254,7 @@ def build(scores: list, artist_state: dict | None = None) -> list[dict]:
     left_counts: dict[str, set[str]] = {}
     for raw in scores:
         t0 = pick(raw, TITLE_KEYS) if isinstance(raw, dict) else str(raw)
-        c0 = clean_title(t0, idx.noise)[0]
+        c0 = clean_title(t0[:300], idx.noise)[0]
         a = raw_left(c0)
         if a and _NUMERIC.match(a):
             left_counts.setdefault(norm(a), set()).add(norm(c0))   # 같은 제목 두 벌은 한 곡
@@ -264,7 +264,7 @@ def build(scores: list, artist_state: dict | None = None) -> list[dict]:
             raw = {"DisplayTitle": str(raw)}
         title = pick(raw, TITLE_KEYS)
         exact[title] = exact.get(title, 0) + 1
-        cleaned, removed, tags, variant = clean_title(title, idx.noise)
+        cleaned, removed, tags, variant = clean_title(title[:300], idx.noise)   # 정규화 비용 상한 (원본 title 은 그대로 둔다)
         similar[dup_key(cleaned)] = similar.get(dup_key(cleaned), 0) + 1
         artist, song, rule = split_artist(cleaned, numeric_artists)
         # '곡 - 아티스트' 처럼 뒤집힌 제목: 오른쪽만 등록된 이름이면 바꿔 준다
