@@ -227,8 +227,9 @@ function ddMake(el,getItems,getVal,setVal){
   btn.onclick=(ev)=>{ev.stopPropagation();list.hidden?open():close();};
   el._refresh=label;label();return {refresh:label};
 }
-const instItems=()=>[{v:"",label:S.settings.default_inst?`기본 악기 (${S.settings.default_inst})`:"악기 그대로"}].concat(S.instruments.map((i,k)=>({v:i.name,label:i.name,eq:i.equipped,sep:k===0})));
-const instItemsSet=()=>[{v:"",label:"지정 안 함 (장착 악기 그대로)"}].concat(S.instruments.map((i,k)=>({v:i.name,label:i.name,eq:i.equipped,sep:k===0})));
+const instLabel=(i)=>(i.cliBroken?"⚠ ":"")+i.name;   // ⚠ = 게임 CLI 가 이름 끝 공백 때문에 못 바꾸는 악기 (게임에서 직접 장착해야 함)
+const instItems=()=>[{v:"",label:S.settings.default_inst?`기본 악기 (${S.settings.default_inst})`:"악기 그대로"}].concat(S.instruments.map((i,k)=>({v:i.name,label:instLabel(i),eq:i.equipped,sep:k===0})));
+const instItemsSet=()=>[{v:"",label:"지정 안 함 (장착 악기 그대로)"}].concat(S.instruments.map((i,k)=>({v:i.name,label:instLabel(i),eq:i.equipped,sep:k===0})));
 
 /* ── 데이터 로드 ── */
 async function refreshState(){const s=await api("/api/state");
@@ -392,7 +393,7 @@ function renderPlRows(pl,items){
     `<div class="note" style="padding:8px 10px">핸들을 끌어 순서 변경 · 악기는 곡마다 다르게 지정할 수 있습니다.</div>`;
   bindRows(items);renderBulk(items);
   $("mid").querySelectorAll("[data-rm]").forEach((b)=>b.onclick=async()=>{await listsApi({op:"remove",id:pl.id,titles:[b.dataset.rm]});render();});
-  $("mid").querySelectorAll("[data-inst-of]").forEach((el)=>{const t=el.dataset.instOf;ddMake(el,()=>[{v:"",label:"그대로"}].concat(S.instruments.map((i,k)=>({v:i.name,label:i.name,eq:i.equipped,sep:k===0}))),()=>{const P=S.lists.playlists.find((x)=>x.id===pl.id)||pl;return (P.items.find((x)=>x.title===t)||{}).inst||"";},async(v)=>{await listsApi({op:"set_inst",id:pl.id,title:t,inst:v});refreshQueue();renderQueue();});el.querySelector(".dd-btn").style.padding="4px 8px";el.querySelector(".dd-btn").style.fontSize="12px";});
+  $("mid").querySelectorAll("[data-inst-of]").forEach((el)=>{const t=el.dataset.instOf;ddMake(el,()=>[{v:"",label:"그대로"}].concat(S.instruments.map((i,k)=>({v:i.name,label:instLabel(i),eq:i.equipped,sep:k===0}))),()=>{const P=S.lists.playlists.find((x)=>x.id===pl.id)||pl;return (P.items.find((x)=>x.title===t)||{}).inst||"";},async(v)=>{await listsApi({op:"set_inst",id:pl.id,title:t,inst:v});refreshQueue();renderQueue();});el.querySelector(".dd-btn").style.padding="4px 8px";el.querySelector(".dd-btn").style.fontSize="12px";});
   $("ckAll").onchange=()=>{S.selected=new Set($("ckAll").checked?items.map((i)=>i.title):[]);renderMid();};
   // 드래그 순서 변경
   let drag=null;$("mid").querySelectorAll(".row.pl[draggable]").forEach((r)=>{r.ondragstart=(e)=>{drag=r;r.classList.add("dragging");e.dataTransfer.effectAllowed="move";};r.ondragend=()=>{r.classList.remove("dragging");$("mid").querySelectorAll(".over").forEach((x)=>x.classList.remove("over","after"));};

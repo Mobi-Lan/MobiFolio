@@ -408,7 +408,7 @@ def play(title: str, instrument: str | None) -> dict:
     if cache and title not in cache:
         return {"ok": False, "steps": [], "error": "not_found", "message": "보관함에 없는 악보입니다. 갱신 후 다시 시도하세요."}
     insts = [lib.pick(x, lib.NAME_KEYS) for x in store.get_cache("instruments")["items"] if isinstance(x, dict)]
-    if inst and insts and inst not in insts:
+    if inst and insts and inst not in insts and inst.strip() not in [x.strip() for x in insts]:
         return {"ok": False, "steps": [], "error": "not_found", "message": f"보유하지 않은 악기입니다: {inst}"}
     if s.get("stop_before_play"):
         a = _cli("get_activity", timeout=30)
@@ -419,11 +419,21 @@ def play(title: str, instrument: str | None) -> dict:
             if r0.error == "invalid_state":
                 time.sleep(0.8)
     if inst:
-        r = _cli("change_instrument", {"name": inst}, timeout=120)
-        out["steps"].append(r.to_dict()); _note(r, f"악기 → {inst}")
-        if not r.ok:
-            out["ok"] = False
-            return out
+        equipped = next((lib.pick(x, lib.NAME_KEYS) for x in store.get_cache("instruments")["items"] if isinstance(x, dict) and x.get("IsEquipped")), "")
+        if equipped and equipped.strip() == inst.strip():
+            out["steps"].append({"command": "change_instrument", "ok": True, "skipped": True, "message": "이미 장착 중"})   # CLI 호출 생략
+        else:
+            r = _cli("change_instrument", {"name": inst}, timeout=120)
+            out["steps"].append(r.to_dict()); _note(r, f"악기 → {inst}")
+            if not r.ok and r.error == "not_found" and inst != inst.strip():   # 이름 끝 공백: CLI 가 못 찾으면 뗀 이름으로 한 번 더
+                r = _cli("change_instrument", {"name": inst.strip()}, timeout=120)
+                out["steps"].append(r.to_dict()); _note(r, f"악기 → {inst.strip()} (공백 제거 재시도)")
+            if not r.ok:
+                out["ok"] = False
+                if r.error == "not_found" and inst != inst.strip():
+                    out["error"] = "cli_instrument_name"
+                    out["message"] = "게임 CLI 가 이 악기를 찾지 못합니다 (이름 끝 공백 때문 — CLI 쪽 문제). 게임에서 직접 장착한 뒤 악기를 「악기 그대로」로 두고 재생하세요."
+                return out
     for attempt in range(4):   # 정지 직후 상태 전이 중이면 invalid_state → 짧게 재시도 (다음 곡으로 건너뛰지 않게)
         r = _cli("play_music_score", {"title": title}, timeout=60)   # 즉시 반환 명령: 잠금을 오래 잡지 않게
         out["steps"].append(r.to_dict()); _note(r, f"재생 · {title}" + (f" (재시도 {attempt})" if attempt else ""))

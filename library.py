@@ -335,6 +335,7 @@ def build_instruments(instruments: list) -> list[dict]:
             raw = {"Name": str(raw)}
         name = pick(raw, NAME_KEYS)
         out.append({"i": i, "name": name, "norm": norm(name), "equipped": bool(raw.get("IsEquipped", False)),
+                    "cliBroken": name != name.strip(),   # 이름 끝 공백: 게임 CLI 의 change_instrument 가 못 찾는다 (실측)
                     "durability": raw.get("Durability"), "raw": raw})
     return out
 
