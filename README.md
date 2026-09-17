@@ -1,4 +1,4 @@
-# MobiFolio (모비폴리오) — MABINOGI MOBILE 팬 프로젝트
+# MobiFolio (모비폴리오) — MABINOGI MOBILE FAN PROJECT
 
 마비노기 모바일 CLI(`MabinogiMobile_CLI.exe`)로 내 악기·악보를 받아 두고, 재생목록(폴더·검색·초성 색인)을 만들고, 고른 악보를 CLI 로 재생하는 로컬 도구. 인터넷·외부 서비스·LLM 없이 동작한다 (파이썬 표준 라이브러리 + 일렉트론 셸).
 
