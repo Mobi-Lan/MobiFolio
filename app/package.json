@@ -10,7 +10,7 @@
     "package": "electron-packager . 악보함 --platform=win32 --arch=x64 --out=../dist-electron --overwrite --extra-resource=../MabiScoreBox.exe --ignore=node_modules/.cache"
   },
   "devDependencies": {
-    "electron": "^33.0.0",
-    "@electron/packager": "^18.3.6"
+    "@electron/packager": "^20.3.0",
+    "electron": "^44.4.1"
   }
 }
