@@ -337,6 +337,12 @@ def item_key(title: str, dup_no: int) -> str:
     return f"{title}#{dup_no}" if dup_no else title
 
 
+def key_title_guess(key: str) -> str:
+    """보관함에 없는 key 의 제목 추정: '제목#숫자' 꼴일 때만 꼬리를 뗀다 (제목 자체에 '#' 이 있는 악보를 자르지 않게)."""
+    m = re.fullmatch(r"(.*)#\d+", key)
+    return m.group(1) if m else key
+
+
 def key_map(items: list[dict]) -> dict[str, str]:
     """key → 원본 제목."""
     return {it["key"]: it["title"] for it in items}

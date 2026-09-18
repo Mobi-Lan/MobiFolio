@@ -274,7 +274,11 @@ def set_settings(patch: dict) -> dict:
 # ── 최근 재생 · 곡 길이 캐시 ──
 def get_recent() -> list:
     r = load("recent.json", [])
-    return [x for x in r if isinstance(x, dict) and isinstance(x.get("title"), str)] if isinstance(r, list) else []
+    out = [x for x in r if isinstance(x, dict) and isinstance(x.get("title"), str)] if isinstance(r, list) else []
+    for x in out:
+        if not isinstance(x.get("key"), str):   # 손상된 key 는 제목으로
+            x["key"] = x["title"]
+    return out
 
 
 def push_recent(title: str, inst: str = "", key: str = "") -> None:

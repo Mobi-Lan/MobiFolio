@@ -255,7 +255,7 @@ const instItemsSet=()=>[{v:"",label:"지정 안 함 (장착 악기 그대로)"}]
 /* ── 데이터 로드 ── */
 async function refreshState(){const s=await api("/api/state");
   if(!s||!s.scores){$("cliDot").className="dot off";$("cliText").textContent="백엔드 응답 없음 — 앱을 다시 실행하세요";S.cliOk=false;if(!S.all.length)setTimeout(loadAll,5000);return s;}
-  const c=s.cli||{};$("cliDot").className="dot "+(c.found?(c.pipe==="connected"?"on":"off"):"");S.cliOk=c.found&&c.pipe==="connected";
+  const c=s.cli||{};S.cliInfo=c;$("cliDot").className="dot "+(c.found?(c.pipe==="connected"?"on":"off"):"");S.cliOk=c.found&&c.pipe==="connected";
   $("cliText").textContent=!c.found?"CLI 없음 — 설정에서 경로 지정 또는 인게임 토글":(c.pipe==="connected"?"CLI 연결됨":`CLI 끊김 ${c.reason||c.status_error||""}`);
   $("fetched").textContent=`악보 ${s.scores.count} · 악기 ${s.instruments.count} · 수신 ${fmtTs(s.scores.fetched_at)}`;return s;}
 async function loadAll(){const [sc,ls,ar,ins,st]=await Promise.all([api("/api/scores"),api("/api/playlists"),api("/api/artists"),api("/api/instruments"),api("/api/settings")]);
@@ -569,11 +569,11 @@ $("btnSync").onclick=async()=>{const b=$("btnSync"),html=b.innerHTML;b.disabled=
   finally{b.disabled=false;b.innerHTML=html;}};
 $("btnReport").onclick=async()=>{const d=await api("/api/normalize");const s=d.summary;$("repMeta").textContent=`${s.count}곡 · 인식 ${s.count-s.other} · 기타 ${s.other}`;$("repBody").textContent=d.rows.map((r)=>`${r.bucket==="other"?"기타":"인식"} ${r.rule.padEnd(6)} | ${r.title}\n      → 아티스트 [${r.artist}] 곡 [${r.song}]${r.variant?` 변형 ${r.variant}`:""}${r.tags.length?` 태그 ${r.tags.join(",")}`:""}${r.removed.length?` 제거 ${r.removed.join(" ")}`:""}`).join("\n");$("rep").showModal();};
 let sInst="";
-$("btnSettings").onclick=async()=>{$("sUpdBox").hidden=true;const d=await api("/api/settings");const s=d.settings;api("/api/health").then((h)=>{$("sVer").textContent=h&&h.version?`현재 버전 v${h.version}${h.lite?" · 경량판":""}`:"";});$("sCli").value=s.cli_exe||"";$("sUpdUrl").value=s.update_url||"";$("sUpdChk").checked=!!s.update_check;$("sGap").value=s.gap_sec;$("sMargin").value=s.advance_margin;$("sStop").checked=!!s.stop_before_play;$("sAuto").checked=!!s.auto_sync;sInst=s.default_inst||"";
-  ddMake($("sInstDd"),instItemsSet,()=>sInst,(v)=>{sInst=v;});$("sCliHint").textContent=cliHint(d.cli);$("set").showModal();$("sCli").focus();};
+$("btnSettings").onclick=async()=>{$("sUpdBox").hidden=true;$("sSave").disabled=$("sUpdNow").disabled=true;$("set").showModal();const d=await api("/api/settings?nocli=1");if(!d||!d.settings){$("sCliHint").textContent="설정을 불러오지 못했습니다: "+((d&&(d.message||d.error))||"");return;}const s=d.settings;$("sSave").disabled=$("sUpdNow").disabled=false;api("/api/health").then((h)=>{$("sVer").textContent=h&&h.version?`현재 버전 v${h.version}${h.lite?" · 경량판":""}`:"";});$("sCli").value=s.cli_exe||"";$("sUpdUrl").value=s.update_url||"";$("sUpdChk").checked=!!s.update_check;$("sGap").value=s.gap_sec;$("sMargin").value=s.advance_margin;$("sStop").checked=!!s.stop_before_play;$("sAuto").checked=!!s.auto_sync;sInst=s.default_inst||"";
+  ddMake($("sInstDd"),instItemsSet,()=>sInst,(v)=>{sInst=v;});$("sCliHint").textContent=cliHint(d.cli||S.cliInfo);$("sCli").focus();};
 const cliHint=(c)=>!c?"—":c.found?`감지된 경로: ${c.exe} · ${c.pipe==="connected"?"연결됨":"끊김 "+(c.reason||c.status_error||"")}${c.override_invalid?" · 설정한 경로가 없어 기본 경로를 씁니다":""}`:"실행파일을 찾지 못했습니다";
 $("sSave").onclick=async()=>{const r=await api("/api/settings",{settings:{update_url:$("sUpdUrl").value.trim(),update_check:$("sUpdChk").checked,cli_exe:$("sCli").value.trim(),gap_sec:Number($("sGap").value)||0,advance_margin:Number($("sMargin").value)||0,default_inst:sInst,stop_before_play:$("sStop").checked,auto_sync:$("sAuto").checked}});
-  if(!r.ok){$("sCliHint").textContent="저장 실패: "+(r.message||r.error||"");return;}S.settings=r.settings;$("sCliHint").textContent=cliHint(r.cli);$("set").close();await refreshState();$("instDd")._refresh&&$("instDd")._refresh();renderMid();};
+  if(!r.ok){$("sCliHint").textContent="저장 실패: "+(r.message||r.error||"");return;}S.settings=r.settings;$("sCliHint").textContent=cliHint(r.cli||S.cliInfo);$("set").close();await refreshState();$("instDd")._refresh&&$("instDd")._refresh();renderMid();};
 /* ── 자동 업데이트 (경량판) ── */
 let updInfo=null;
 // 결과 표시 대상: 설정 창이 열려 있으면 그 안의 카드, 아니면 상단 바
@@ -598,7 +598,7 @@ async function applyUpdate(box){if(!updInfo)return;const btn=box?$("sUpdGo"):$("
     updText(box,"업데이트가 완료되었습니다. 앱을 다시 실행해 주세요.");alert("업데이트가 완료되었습니다.\n새 창으로 자동 전환되지 않았으니 앱을 다시 실행해 주세요.");}
   else if(r.ok){updText(box,r.message);}
   else{if(btn)btn.disabled=false;updText(box,"업데이트 실패: "+(r.message||r.error||""));}}
-$("sUpdNow").onclick=async()=>{const r=await api("/api/settings",{settings:{update_url:$("sUpdUrl").value.trim()}});if(!r.ok){toast(r.message||r.error);return;}await checkUpdate(false);};
+$("sUpdNow").onclick=async()=>{const u=$("sUpdUrl").value.trim();if(!u){toast("업데이트 확인 주소(https)를 먼저 입력하세요");return;}const r=await api("/api/settings",{settings:{update_url:u}});if(!r.ok){toast(r.message||r.error);return;}await checkUpdate(false);};
 $("sTest").onclick=async()=>{$("sCliHint").textContent="확인 중…";const d=await api("/api/cli_test",{cli_exe:$("sCli").value.trim()});$("sCliHint").textContent=d.ok?cliHint(d.cli):"확인 실패: "+(d.message||d.error||"");};
 
 /* ── 시작 ── */

@@ -72,7 +72,7 @@ PARENT = os.environ.get("MABI_PARENT_PID", "")
 LITE_FILE = os.path.join(BASE, "lite.json")   # 경량판이 떠 있는 포트 (두 번째 실행이 창만 다시 열 때 씀)
 UPDATE_DIR = os.path.join(BASE, "update")     # 받은 새 exe 와 교체 스크립트
 MAX_UPDATE_BYTES = 200 * 1024 * 1024
-VERSION = "0.2.2"
+VERSION = "0.2.3"
 _srv = None   # ThreadingHTTPServer (종료용)
 
 
@@ -262,8 +262,12 @@ def _lists() -> dict:
     d = store.get_lists()
     items = _build_items()
     for pl in d["playlists"]:
+        seen: set[str] = set(); kept = []
         for it in pl["items"]:
             it["key"] = lib.resolve_key(it["key"], it["title"], items)
+            if it["key"] not in seen:   # 이어붙인 결과 같은 악보가 둘이면 첫 항목만 (reorder 가 key 로 합치며 항목이 사라지지 않게)
+                seen.add(it["key"]); kept.append(it)
+        pl["items"] = kept
     return d
 
 
@@ -319,9 +323,9 @@ def _lists_op(op: str, p: dict) -> dict:
             if pl["id"] == p.get("id"):
                 have = {it["key"] for it in pl["items"]}
                 for k in _titles(p.get("keys") or p.get("titles")):   # keys = 내부 식별자 (예전 UI 의 titles 도 받는다)
-                    k = lib.resolve_key(k, key_title.get(k) or (k.rsplit("#", 1)[0] if "#" in k else k), cur_items)   # 제목만 온 동명 악보·없는 채번은 그 제목의 첫 장으로
+                    k = lib.resolve_key(k, key_title.get(k) or lib.key_title_guess(k), cur_items)   # 제목만 온 동명 악보·없는 채번은 그 제목의 첫 장으로
                     if k not in have:
-                        pl["items"].append({"key": k, "title": key_title.get(k, k.rsplit("#", 1)[0] if "#" in k else k), "inst": ""}); have.add(k)
+                        pl["items"].append({"key": k, "title": key_title.get(k) or lib.key_title_guess(k), "inst": ""}); have.add(k)
                 pl["updated"] = now
     elif op == "remove":
         rm = set(_titles(p.get("keys") or p.get("titles")))
@@ -759,7 +763,8 @@ class H(SimpleHTTPRequestHandler):
         if u.path == "/api/settings":
             if not self._guard():
                 return _json(self, {"ok": False, "error": "forbidden"}, 403)
-            return _json(self, {"settings": store.get_settings(), "cli": _probe()})
+            # nocli=1: 설정 창을 열 때 — CLI 상태는 /api/state 가 이미 주기적으로 주므로 다시 묻지 않는다 (게임이 꺼져 있으면 probe 가 5초 걸린다)
+            return _json(self, {"settings": store.get_settings(), "cli": None if q.get("nocli") else _probe()})
         if u.path == "/api/update/check":
             if not self._guard():
                 return _json(self, {"ok": False, "error": "forbidden"}, 403)
@@ -908,9 +913,10 @@ class H(SimpleHTTPRequestHandler):
             exe = patch.get("cli_exe")
             if isinstance(exe, str) and exe.strip() and not cli.valid_cli_path(exe):
                 return _json(self, {"ok": False, "error": "bad_cli_exe", "message": "CLI 경로는 로컬 드라이브의 MabinogiMobile_CLI.exe 절대 경로여야 합니다."}, 400)
+            before = store.get_settings().get("cli_exe")
             s = store.set_settings(patch)
             cli.set_exe_override(s.get("cli_exe"))
-            return _json(self, {"ok": True, "settings": s, "cli": _probe()})
+            return _json(self, {"ok": True, "settings": s, "cli": _probe() if s.get("cli_exe") != before else None})   # 경로가 바뀐 때만 다시 확인 (저장이 5초 걸리지 않게)
         return _json(self, {"ok": False, "error": "not_found"}, 404)
 
 
@@ -1001,6 +1007,8 @@ def _app_window_alive() -> bool | None:
             buf = ctypes.create_unicode_buffer(n + 1); u.GetWindowTextW(h, buf, n + 1)
             if os.path.normcase(os.path.normpath(buf.value)) == want:
                 return True
+        else:
+            return None   # 상한까지 뒤졌는데 끝을 못 봄 → 판단 불가 (닫힘으로 단정하지 않는다)
         return False
     except Exception as e:
         print(f"[lite] window check failed: {e}", flush=True)
@@ -1013,7 +1021,7 @@ def _lite_watchdog() -> None:
     2) 연결이 끊겨도 바로 끝내지 않고, 전용 프로필의 브라우저 프로세스가 아직 있으면(절전된 창) 살아 있는 것으로 본다.
        프로세스까지 없어졌을 때만 종료. 앱 창 모드가 아니면(기본 브라우저 탭) 연결이 60초 이상 없을 때 종료.
     3) 창이 90초 안에 한 번도 붙지 않으면(브라우저를 못 띄운 경우) 고아로 남지 않게 끝낸다."""
-    last_check = 0.0
+    last_check = 0.0; misses = 0
     while True:
         time.sleep(1.0)
         now = time.time()
@@ -1023,7 +1031,8 @@ def _lite_watchdog() -> None:
         if (had or _bye_at) and h == 0 and gone_for > 4.0 and now - last_check >= 5.0:
             last_check = now
             alive = _app_window_alive()
-            if alive is False:
+            misses = misses + 1 if alive is False else 0
+            if misses >= 2:   # 5초 간격 2회 연속 없음 (Edge 가 스스로 재시작하는 짧은 구간에 오판하지 않게)
                 _say("[lite] window closed — exiting"); _shutdown()
             if alive is None and gone_for > 60.0:
                 _say("[lite] no window connection for 60s — exiting"); _shutdown()
