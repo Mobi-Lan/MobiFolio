@@ -217,6 +217,7 @@ DEFAULT_SETTINGS = {
     "stop_before_play": True, # 재생 전 현재 연주를 먼저 정지
     "update_url": "https://fo.mobimml.com/latest.json",   # 경량판 자동 업데이트: latest.json 주소 (https). 비우면 확인하지 않는다
     "update_check": True,     # 시작 시 업데이트 확인
+    "ensemble": True,         # 합주 인식: 주변에 같은 곡을 다채널로 연주하는 사람이 있거나 내 보관함에 없는 곡을 연주 중이면, 상대 곡 길이에 맞춰 끝낸다
 }
 _RANGES = {"gap_sec": (0, 60), "advance_margin": (0, 30)}
 

@@ -72,7 +72,7 @@ PARENT = os.environ.get("MABI_PARENT_PID", "")
 LITE_FILE = os.path.join(BASE, "lite.json")   # 경량판이 떠 있는 포트 (두 번째 실행이 창만 다시 열 때 씀)
 UPDATE_DIR = os.path.join(BASE, "update")     # 받은 새 exe 와 교체 스크립트
 MAX_UPDATE_BYTES = 200 * 1024 * 1024
-VERSION = "0.2.4"
+VERSION = "0.2.5"
 _srv = None   # ThreadingHTTPServer (종료용)
 
 
@@ -435,6 +435,24 @@ def _artists_op(op: str, p: dict) -> dict:
 
 
 # ── 재생·정지 ──
+def _ensemble() -> dict:
+    """주변 플레이어의 연주 상태만 간추린다 (합주 인식용). 이름은 UI 표시용 RealmName 하나만."""
+    r = _cli("get_near_pcs", timeout=30)
+    out = {"ok": r.ok, "error": r.error, "message": r.message, "players": []}
+    rows = r.body if isinstance(r.body, list) else []
+    for x in rows:
+        if not isinstance(x, dict):
+            continue
+        pf = x.get("Performance") if isinstance(x.get("Performance"), dict) else {}
+        out["players"].append({
+            "name": str(x.get("RealmName") or ""), "distance": x.get("Distance"),
+            "playing": bool(pf.get("IsPlaying")), "title": str(pf.get("MusicTitle") or ""),
+            "channels": pf.get("ChannelCount") or 0, "total": pf.get("TotalDurationSeconds") or 0,
+            "elapsed": pf.get("ElapsedSeconds") or 0, "remaining": pf.get("RemainingSeconds"), "loop": bool(pf.get("IsLoop")),
+        })
+    return out
+
+
 def _activity() -> dict:
     a = _cli("get_activity", timeout=30)
     perf = (a.body or {}).get("Performance") if isinstance(a.body, dict) else None
@@ -735,6 +753,10 @@ class H(SimpleHTTPRequestHandler):
             if not self._guard():   # CLI 를 실행시키는 GET 이라 출처 검사
                 return _json(self, {"ok": False, "error": "forbidden"}, 403)
             return _json(self, _activity())
+        if u.path == "/api/ensemble":   # 합주 인식용 주변 플레이어 연주 상태 (읽기 전용)
+            if not self._guard():
+                return _json(self, {"ok": False, "error": "forbidden"}, 403)
+            return _json(self, _ensemble())
         if u.path == "/api/hold":   # 창이 살아 있는 동안 열어 두는 연결 (경량판 종료 판정). 5초마다 한 바이트를 보내 끊김을 감지
             if not self._guard():
                 return _json(self, {"ok": False, "error": "forbidden"}, 403)

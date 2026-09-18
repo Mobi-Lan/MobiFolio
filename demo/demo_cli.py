@@ -129,6 +129,7 @@ def respond(command: str, body) -> tuple[int, object]:
                 ("change_instrument", "Equip an instrument", '{"name": "..."}'),
                 ("stop_action", "Stop the current action", ""),
                 ("get_activity", "Query current activity", ""),
+                ("get_near_pcs", "Query nearby players", ""),
             )]}
 
     if command == "get_instruments":
@@ -140,6 +141,17 @@ def respond(command: str, body) -> tuple[int, object]:
 
     if command == "get_activity":
         return 0, {"Performance": _performance()}
+
+    if command == "get_near_pcs":
+        me = _performance()
+        if not me["IsPlaying"]:
+            return 0, []
+        total = max(20.0, _perf["total"] * 0.6)   # 이웃(합주 리더)의 악보는 내 것보다 짧다 → 앱이 리더 곡 끝에 맞춰 멈추는지 확인용
+        el = min(_elapsed(), total)
+        return 0, [{"RealmName": "데모합주자", "Title": "", "Distance": 4.2, "Level": 60, "IsFriend": False, "IsInParty": True,
+                    "Performance": {"IsPlaying": el < total, "MusicTitle": me["MusicTitle"], "IsCopyingAllowed": True, "IsLoop": False,
+                                    "TotalDurationSeconds": round(total, 2), "ElapsedSeconds": round(el, 2),
+                                    "RemainingSeconds": round(max(0.0, total - el), 2), "ChannelCount": 2}}]
 
     if command == "change_instrument":
         name = str(arg.get("name") or "")
