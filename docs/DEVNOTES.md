@@ -59,4 +59,4 @@ Electron 없이 백엔드 exe 하나만 배포하는 판. 실행하면 스스로
 MIT (루트 LICENSE). 비공식 팬 프로젝트로 NEXON·devCAT 과 무관.
 
 ## 구조
-`cli_transport.py`(호출·인코딩·exit코드) · `store.py`(data/·fixtures/·설정 검증·잠금) · `library.py`(정규화·아티스트·초성·중복·검색) · `server.py`(API + UI 서빙 + 종료/헬스) · `ui/index.html` · `app/main.js`(일렉트론 셸) · `build.cmd`(exe + 패키지) · `run.cmd`(개발 실행).
+`cli_transport.py`(호출·인코딩·exit코드) · `store.py`(data/·fixtures/·설정 검증·잠금) · `library.py`(정규화·아티스트·초성·중복·검색) · `server.py`(API + UI 서빙 + 종료/헬스) · `ui/index.html` · `app/main.js`(일렉트론 셸) · `build.cmd`(exe + 패키지; 백엔드 exe 는 dist\ 에서 바로 동봉) · `run.cmd`(개발 실행).

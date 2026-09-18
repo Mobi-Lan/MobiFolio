@@ -9,7 +9,7 @@
   "private": true,
   "scripts": {
     "start": "electron .",
-    "package": "electron-packager . MobiFolio --platform=win32 --arch=x64 --out=../dist-electron --overwrite --extra-resource=../MobiFolioCore.exe --ignore=node_modules/.cache --win32metadata.CompanyName=Mobi-Lan --win32metadata.ProductName=MobiFolio --win32metadata.FileDescription=\"MobiFolio - MABINOGI MOBILE FAN PROJECT\" --win32metadata.OriginalFilename=MobiFolio.exe --icon=icon/MobiFolio.ico && node fuse.js",
+    "package": "electron-packager . MobiFolio --platform=win32 --arch=x64 --out=../dist-electron --overwrite --extra-resource=../dist/MobiFolioCore.exe --ignore=node_modules/.cache --win32metadata.CompanyName=Mobi-Lan --win32metadata.ProductName=MobiFolio --win32metadata.FileDescription=\"MobiFolio - MABINOGI MOBILE FAN PROJECT\" --win32metadata.OriginalFilename=MobiFolio.exe --icon=icon/MobiFolio.ico && node fuse.js",
     "installer": "electron-builder --win nsis --prepackaged ../dist-electron/MobiFolio-win32-x64 --publish never"
   },
   "build": {

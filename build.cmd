@@ -12,8 +12,6 @@ if not errorlevel 1 ( echo CLOSE THE APP FIRST: MobiFolioCore.exe is running & g
 python -m pip install --quiet --disable-pip-version-check "pyinstaller==6.22.3"
 python -m PyInstaller --noconfirm --clean --onefile --noconsole --name MobiFolioCore --add-data "ui;ui" --version-file version_info.txt --noupx --icon app\icon\MobiFolio.ico server.py
 if errorlevel 1 ( echo BACKEND BUILD FAILED & goto :fail )
-copy /y dist\MobiFolioCore.exe MobiFolioCore.exe >nul
-if errorlevel 1 ( echo COPY FAILED: MobiFolioCore.exe is locked? & goto :fail )
 rem Lite edition: same backend, started directly (opens an Edge/Chrome app window itself; no Electron). Single ~9 MB exe.
 python -m PyInstaller --noconfirm --clean --onefile --noconsole --name MobiFolioLite --add-data "ui;ui" --version-file version_info_lite.txt --noupx --icon app\icon\MobiFolio.ico server.py
 if errorlevel 1 ( echo LITE BUILD FAILED & goto :fail )
