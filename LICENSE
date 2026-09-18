@@ -1,25 +1,27 @@
-MobiFolio — MABINOGI MOBILE FAN PROJECT
+MIT License
 
-Copyright (C) 2026 란님. All rights reserved.
+Copyright (c) 2026 란님
 
-이 소프트웨어와 소스 코드의 저작권은 란님에게 있습니다.
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-허용:
-- 배포된 실행 파일을 개인적·비상업적 용도로 사용하는 것.
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
-허용하지 않음(저작권자의 사전 서면 허락이 없는 한):
-- 소스 코드 또는 실행 파일의 재배포, 수정본 배포, 판매 등 상업적 이용.
-- 저작권 표시·면책 문구의 제거.
-
-이 소프트웨어는 "있는 그대로" 제공되며, 사용으로 인한 어떠한 손해에 대해서도 저작권자는 책임지지 않습니다.
-
-MobiFolio 는 비공식 팬 프로젝트로 NEXON·devCAT 과 무관하며 이들의 보증을 받지 않았습니다.
-마비노기 모바일 및 관련 표장은 각 권리자의 상표입니다.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 
 ---
 
-Copyright (C) 2026 란님. All rights reserved.
-Personal, non-commercial use of the distributed binaries is permitted.
-Redistribution, modification, or commercial use of the source code or binaries
-requires prior written permission from the copyright holder.
-Provided "as is", without warranty of any kind.
+MobiFolio is an unofficial fan project. It is not affiliated with, endorsed by,
+or sponsored by NEXON or devCAT. "Mabinogi Mobile" and related marks are
+trademarks of their respective owners.
