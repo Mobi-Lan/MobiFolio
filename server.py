@@ -72,7 +72,7 @@ PARENT = os.environ.get("MABI_PARENT_PID", "")
 LITE_FILE = os.path.join(BASE, "lite.json")   # 경량판이 떠 있는 포트 (두 번째 실행이 창만 다시 열 때 씀)
 UPDATE_DIR = os.path.join(BASE, "update")     # 받은 새 exe 와 교체 스크립트
 MAX_UPDATE_BYTES = 200 * 1024 * 1024
-VERSION = "0.2.1"
+VERSION = "0.2.2"
 _srv = None   # ThreadingHTTPServer (종료용)
 
 
@@ -977,18 +977,31 @@ _app_profile = ""        # 앱 창을 띄운 브라우저의 전용 프로필 �
 
 
 def _app_window_alive() -> bool | None:
-    """전용 프로필로 띄운 Edge/Chrome 프로세스가 아직 있는가. 앱 창 모드가 아니면 None(판단 불가).
-    Edge 는 한동안 안 쓴 창을 절전(슬리핑 탭)시키며 연결을 끊을 수 있어, 연결 끊김만으로는 '창 닫힘'을 단정할 수 없다 (실측)."""
+    """전용 프로필로 띄운 Edge/Chrome 창이 아직 있는가. 앱 창 모드가 아니면 None(판단 불가).
+    Edge 는 한동안 안 쓴 창을 절전(슬리핑 탭)시키며 연결을 끊을 수 있어, 연결 끊김만으로는 '창 닫힘'을 단정할 수 없다 (실측).
+    Chromium 은 프로필마다 제목이 프로필 경로인 메시지 전용 창(클래스 Chrome_MessageWindow)을 하나 둔다 — 그 창을 user32 로 찾는다.
+    (예전엔 PowerShell 로 프로세스 명령줄을 뒤졌는데, 백신이 'PowerShell 실행' 행동으로 오탐하는 요인이라 뺐다.)"""
     if not _app_profile:
         return None
     try:
-        import subprocess
-        ps = ("$k=[Environment]::GetEnvironmentVariable('MF_PROFILE'); (Get-CimInstance Win32_Process | Where-Object { "
-              "($_.Name -eq 'msedge.exe' -or $_.Name -eq 'chrome.exe') -and $_.CommandLine -like ('*'+$k+'*') } | Measure-Object).Count")
-        env = dict(os.environ, MF_PROFILE=_app_profile)
-        r = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", ps], capture_output=True, timeout=20,
-                           env=env, creationflags=0x08000000)
-        return int(r.stdout.decode("utf-8", "replace").strip() or "0") > 0
+        import ctypes
+        from ctypes import wintypes as w
+        u = ctypes.windll.user32
+        u.FindWindowExW.argtypes = [w.HWND, w.HWND, w.LPCWSTR, w.LPCWSTR]; u.FindWindowExW.restype = w.HWND
+        u.GetWindowTextLengthW.argtypes = [w.HWND]; u.GetWindowTextW.argtypes = [w.HWND, w.LPWSTR, ctypes.c_int]
+        want = os.path.normcase(os.path.normpath(_app_profile))
+        h = None
+        for _ in range(4096):
+            h = u.FindWindowExW(w.HWND(-3), h, "Chrome_MessageWindow", None)   # HWND_MESSAGE 아래의 메시지 전용 창들
+            if not h:
+                break
+            n = u.GetWindowTextLengthW(h)
+            if n <= 0:
+                continue
+            buf = ctypes.create_unicode_buffer(n + 1); u.GetWindowTextW(h, buf, n + 1)
+            if os.path.normcase(os.path.normpath(buf.value)) == want:
+                return True
+        return False
     except Exception as e:
         print(f"[lite] window check failed: {e}", flush=True)
         return None
