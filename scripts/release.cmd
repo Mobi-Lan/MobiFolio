@@ -29,7 +29,9 @@ cd ..
 rem 2b) latest.json for the lite auto-updater (version, url, sha256)
 powershell -NoProfile -Command "$h=(Get-FileHash '%OUT%\MobiFolioLite-%VER%.exe' -Algorithm SHA256).Hash.ToLower(); @{version='%VER%'; url='%MF_UPDATE_BASE%/MobiFolioLite-%VER%.exe'; sha256=$h; notes=''} | ConvertTo-Json -Compress | Set-Content -Encoding ascii '%OUT%\latest.json'"
 type "%OUT%\latest.json"
-rem 2c) promo site: copy exe + latest.json + SHA256SUMS, update _redirects and main.js (deploy MobiFolio_promo\site afterwards)
+rem 2c) promo site: publish and deploy. MobiFolio_promo\site is the working copy of the deploy repo
+rem      (Mobi-Lan/MobiFolio_WEB); the script verifies, commits and pushes, then Cloudflare Pages goes live.
+rem      Nothing to do by hand afterwards. Use --no-push to stop before pushing.
 set PYTHONUTF8=1
 python scripts\publish_promo.py --version %VER% --base %MF_UPDATE_BASE% --promo "%MF_PROMO_DIR%"
 rem 3) checksums
