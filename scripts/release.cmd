@@ -21,6 +21,7 @@ powershell -NoProfile -Command "Compress-Archive -Path '%OUT%\MobiFolio-win32-x6
 echo portable zip OK
 rem 1b) lite edition: single exe (build.cmd produces dist\MobiFolioLite.exe)
 if exist "dist\MobiFolioLite.exe" ( copy /y "dist\MobiFolioLite.exe" "%OUT%\MobiFolioLite-%VER%.exe" >nul && echo lite exe OK ) else ( echo lite exe missing - run build.cmd )
+if exist "dist\MobiFolioMini.exe" ( copy /y "dist\MobiFolioMini.exe" "%OUT%\MobiFolioMini-%VER%.exe" >nul && echo mini exe OK )
 rem 2) installer (electron-builder wraps the prepackaged folder; fuses/icon/metadata are kept as built)
 cd app
 call npm run installer

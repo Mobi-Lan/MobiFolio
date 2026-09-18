@@ -15,6 +15,9 @@ if errorlevel 1 ( echo BACKEND BUILD FAILED & goto :fail )
 rem Lite edition: same backend, started directly (opens an Edge/Chrome app window itself; no Electron). Single ~9 MB exe.
 python -m PyInstaller --noconfirm --clean --onefile --noconsole --name MobiFolioLite --add-data "ui;ui" --version-file packaging\version_info_lite.txt --noupx --icon app\icon\MobiFolio.ico server.py
 if errorlevel 1 ( echo LITE BUILD FAILED & goto :fail )
+rem Mini edition: same backend + mini UI (game-like grid; playlist/play/shuffle/repeat only; 440x920 app window).
+python -m PyInstaller --noconfirm --clean --onefile --noconsole --name MobiFolioMini --add-data "mini\ui;ui" --version-file packaging\version_info_mini.txt --noupx --icon app\icon\MobiFolio.ico server.py
+if errorlevel 1 ( echo MINI BUILD FAILED & goto :fail )
 cd app
 if not exist node_modules ( call npm ci --no-audit --no-fund )
 call npm run package

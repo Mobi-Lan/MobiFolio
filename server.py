@@ -72,7 +72,7 @@ PARENT = os.environ.get("MABI_PARENT_PID", "")
 LITE_FILE = os.path.join(BASE, "lite.json")   # 경량판이 떠 있는 포트 (두 번째 실행이 창만 다시 열 때 씀)
 UPDATE_DIR = os.path.join(BASE, "update")     # 받은 새 exe 와 교체 스크립트
 MAX_UPDATE_BYTES = 200 * 1024 * 1024
-VERSION = "0.2.5"
+VERSION = "0.2.6"
 _srv = None   # ThreadingHTTPServer (종료용)
 
 
@@ -123,6 +123,34 @@ def _watch_parent() -> None:
     except Exception:
         pass
 UI_DIR = os.path.join(RES, "ui")
+if _DEV_ENV_OK and os.environ.get("MABI_UI_DIR"):   # 개발용: 다른 화면 꾸러미(미니판 mini/ui 등)를 같은 백엔드로 띄운다
+    UI_DIR = os.path.abspath(os.environ["MABI_UI_DIR"])
+
+
+def _load_ui_meta() -> dict:
+    """ui/app.json (선택). {"name": "Mini", "width": 440, "height": 920, "update": false}
+    화면 꾸러미가 앱 창 크기, 단일 실행·창 프로필 이름(name), 자동 업데이트 사용 여부를 정한다. 없으면 기본(정식 화면)."""
+    try:
+        with open(os.path.join(UI_DIR, "app.json"), encoding="utf-8") as f:
+            m = json.load(f)
+        return m if isinstance(m, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+UI_META = _load_ui_meta()
+UI_NAME = re.sub(r"[^A-Za-z0-9]", "", str(UI_META.get("name") or ""))[:16]   # "" = 기본 화면
+if UI_NAME:
+    LITE_FILE = os.path.join(BASE, f"lite-{UI_NAME}.json")   # 화면 꾸러미마다 따로 (미니판과 경량판을 같이 띄울 수 있게)
+_APP_PROFILE = ".appwindow-profile" + (f"-{UI_NAME}" if UI_NAME else "")
+
+
+def _window_size() -> str:
+    try:
+        w = int(UI_META.get("width") or 1280); h = int(UI_META.get("height") or 860)
+    except (TypeError, ValueError):
+        w, h = 1280, 860
+    return f"{min(max(w, 300), 4000)},{min(max(h, 300), 4000)}"
 _cli_lock = threading.Lock()   # CLI 는 한 번에 하나만 (게임 파이프 직렬)
 _log: list[dict] = store.get_log()   # 최근 CLI 응답 요약 (UI 「CLI 응답」) — data/cli_log.json 에 남겨 재시작 후에도 보인다
 _last_play: dict = {"title": "", "inst": ""}   # 길이 캐시 키(DisplayTitle)용
@@ -479,6 +507,8 @@ def _safe_url(u: str) -> bool:
 
 def update_check() -> dict:
     """설정의 latest.json 을 읽어 새 버전이 있는지 본다. 보내는 것은 없다(사용자 정보 없음)."""
+    if UI_META.get("update") is False:   # 이 화면 꾸러미는 자동 업데이트를 쓰지 않는다 (미니판: latest.json 이 경량판 exe 를 가리키므로)
+        return {"ok": True, "available": False, "current": VERSION, "disabled": True}
     url = str(store.get_settings().get("update_url") or "").strip()
     if not _safe_url(url):
         return {"ok": False, "error": "no_url", "message": "업데이트 확인 주소(https)가 설정되지 않았습니다.", "current": VERSION}
@@ -714,7 +744,7 @@ class H(SimpleHTTPRequestHandler):
         u = urlparse(self.path)
         q = {k: v[0] for k, v in parse_qs(u.query).items()}
         if u.path == "/api/health":   # 일렉트론 셸이 "이 포트가 정말 모비폴리오인지" 확인하는 용도
-            return _json(self, {"app": "mobifolio", "version": VERSION, "pid": os.getpid(), "frozen": FROZEN, "lite": LITE,
+            return _json(self, {"app": "mobifolio", "version": VERSION, "pid": os.getpid(), "frozen": FROZEN, "lite": LITE, "ui": UI_NAME or "full",
                                 "parent": int(PARENT) if PARENT.isdigit() else None})
         if u.path == "/api/state":
             sc, ins = store.get_cache("scores"), store.get_cache("instruments")
@@ -961,9 +991,9 @@ def _launch_app_window(url: str):
     global _app_profile
     exe = _find_app_browser()
     if exe:
-        profile = os.path.join(BASE, ".appwindow-profile")
+        profile = os.path.join(BASE, _APP_PROFILE)
         _app_profile = profile
-        args = [exe, f"--app={url}", "--window-size=1280,860", f"--user-data-dir={profile}",
+        args = [exe, f"--app={url}", f"--window-size={_window_size()}", f"--user-data-dir={profile}",
                 "--no-first-run", "--no-default-browser-check", "--disable-extensions", "--disable-features=TranslateUI,msEdgeStartupBoost",
                 # 최소화·가림 상태에서도 페이지 타이머(재생 감시 1초 폴링)가 늦춰지지 않게
                 "--disable-background-timer-throttling", "--disable-backgrounding-occluded-windows", "--disable-renderer-backgrounding"]
@@ -985,7 +1015,7 @@ def _open_window() -> None:
 
     if LITE_REUSE:
         global _app_profile
-        _app_profile = os.path.join(BASE, ".appwindow-profile")   # 창은 이미 떠 있고(페이지가 새 포트로 이동) 감시만 이어간다
+        _app_profile = os.path.join(BASE, _APP_PROFILE)   # 창은 이미 떠 있고(페이지가 새 포트로 이동) 감시만 이어간다
     else:
         threading.Thread(target=lambda: _launch_app_window(url), daemon=True).start()
     if LITE:
@@ -1083,7 +1113,7 @@ def _lite_single_instance() -> bool:
         import ctypes
         k32 = ctypes.windll.kernel32
         global _mutex
-        _mutex = k32.CreateMutexW(None, False, "Local\\MobiFolioLite")
+        _mutex = k32.CreateMutexW(None, False, "Local\\MobiFolioLite" + UI_NAME)
         if k32.GetLastError() == 183:   # ERROR_ALREADY_EXISTS
             try:
                 with open(LITE_FILE, encoding="utf-8") as f:

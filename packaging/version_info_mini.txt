@@ -1,4 +1,4 @@
-# PyInstaller version resource for MobiFolioLite.exe (ASCII only)
+# PyInstaller version resource for MobiFolioMini.exe (ASCII only)
 VSVersionInfo(
   ffi=FixedFileInfo(
     filevers=(0, 2, 6, 0),
@@ -15,10 +15,10 @@ VSVersionInfo(
       StringTable(
         '040904B0',
         [StringStruct('CompanyName', 'Mobi-Lan'),
-         StringStruct('FileDescription', 'MobiFolio Lite (MABINOGI MOBILE FAN PROJECT)'),
+         StringStruct('FileDescription', 'MobiFolio Mini (MABINOGI MOBILE FAN PROJECT)'),
          StringStruct('FileVersion', '0.2.6.0'),
-         StringStruct('InternalName', 'MobiFolioLite'),
-         StringStruct('OriginalFilename', 'MobiFolioLite.exe'),
+         StringStruct('InternalName', 'MobiFolioMini'),
+         StringStruct('OriginalFilename', 'MobiFolioMini.exe'),
          StringStruct('ProductName', 'MobiFolio'),
          StringStruct('ProductVersion', '0.2.6.0')])
     ]),

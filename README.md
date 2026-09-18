@@ -50,6 +50,14 @@
 
 처음이라면 **경량판**을 권합니다. 두 판은 같은 데이터를 쓰므로 나중에 바꿔도 재생목록이 그대로입니다.
 
+## 미니판 (MobiFolioMini.exe)
+
+게임 화면 옆에 두고 쓰는 세로형 창(440×920)입니다. 백엔드는 같고 화면만 다릅니다. 게임 보관함처럼 악보가 두루마리 격자로 쌓이고, 기능은 재생목록(담기·제거·순서·곡별 악기), 재생·셔플·한 곡 반복만 있습니다. 정식판·경량판과 같은 데이터(재생목록·설정)를 씁니다. 자동 업데이트는 없으며 새 exe 로 바꿔 넣으면 됩니다.
+
+- 곡을 한 번 누르면 선택, 두 번 누르면 바로 연주. 선택하면 아래에 「재생 · 담기 · (재생목록에서) ▲ ▼ 제거」 막대가 뜹니다.
+- 우클릭: 지금 연주 · 재생목록에 담기 · (재생목록에서) 이 곡 악기 지정 · 제거.
+- 위쪽 알약: 전체 · 최근 · 재생목록들 · 「+ 목록」. 재생목록을 열면 「▶ 전체」와 이름 변경·삭제 메뉴가 있습니다.
+
 ## 필요한 것
 
 - Windows 10 또는 11
@@ -107,7 +115,8 @@ git clone https://github.com/Mobi-Lan/MobiFolio.git
 cd MobiFolio
 scripts\run.cmd       :: 개발 실행 (http://127.0.0.1:19997, 브라우저로 열기)
 scripts\demo.cmd      :: 게임·CLI 없이 가짜 데이터로 UI 만 보기
-scripts\build.cmd     :: 경량판 dist\MobiFolioLite.exe + 정식판 dist-electron\MobiFolio-win32-x64\
+scripts\run_mini.cmd  :: 미니판 화면으로 개발 실행
+scripts\build.cmd     :: 경량판 dist\MobiFolioLite.exe · 미니판 dist\MobiFolioMini.exe + 정식판 dist-electron\MobiFolio-win32-x64\
 scripts\release.cmd   :: release\ 에 zip·설치기·latest.json·SHA256SUMS 생성
 ```
 
@@ -126,7 +135,8 @@ store.py           데이터 파일 (설정·재생목록·최근 재생·캐시
 ui/                화면 전부 (index.html) · 로고
 app/               정식판 Electron 셸 (main.js · fuse.js · 아이콘)
 scripts/           run · demo · build · release · publish_promo
-packaging/         PyInstaller 버전 리소스 (정식판 · 경량판)
+mini/              미니판 화면 (ui/index.html · app.json = 창 크기·이름)
+packaging/         PyInstaller 버전 리소스 (정식판 · 경량판 · 미니판)
 demo/              데모 모드 가짜 CLI · 씨앗 데이터
 docs/              개발 메모 · QA 기록 · CLI 명령 카탈로그
 ```

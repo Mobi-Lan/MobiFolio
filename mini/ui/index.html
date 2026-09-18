@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>모비폴리오 mini</title>
+<style>
+:root{--bg1:#0b1730;--bg2:#050a18;--glass:rgba(10,18,36,.72);--glass2:rgba(255,255,255,.06);--line:rgba(255,255,255,.12);--ink:#f2f5fb;--ink2:#c7d0e0;--muted:#8d9ab0;--orange:#ff8a1f;--orange2:#ffb45c;--pill:rgba(255,255,255,.10);--pillon:#ffffff;--onpill:#0b1730;--ok:#5ee6a0;--pink:#ff6f9c;--paper:#efe7d2;--paper2:#cdbfa0;--paperline:#7d6a48;color-scheme:dark}
+*{box-sizing:border-box}html,body{height:100%}
+body{margin:0;font:14px/1.4 "Pretendard","Malgun Gothic","Apple SD Gothic Neo",system-ui,sans-serif;color:var(--ink);background:radial-gradient(120% 60% at 50% -10%,#1d3a6e 0%,var(--bg1) 45%,var(--bg2) 100%) fixed;overflow:hidden;user-select:none;-webkit-user-select:none}
+button{font:inherit;color:inherit;background:none;border:none;cursor:pointer;padding:0}
+[hidden]{display:none!important}
+#app{height:100%;display:flex;flex-direction:column}
+/* 상단 */
+#top{display:flex;align-items:center;gap:8px;padding:10px 12px 6px}
+#top .brand{display:flex;align-items:baseline;gap:6px;flex:1;min-width:0}
+#top .brand b{font-size:16px;letter-spacing:.02em}#top .brand small{font-size:10px;color:var(--orange2);letter-spacing:.12em}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--muted);display:inline-block;box-shadow:0 0 0 2px rgba(255,255,255,.08)}.dot.on{background:var(--ok);box-shadow:0 0 8px var(--ok)}.dot.off{background:var(--pink)}
+.tb{width:34px;height:34px;border-radius:50%;background:var(--glass2);display:inline-flex;align-items:center;justify-content:center;color:var(--ink2)}.tb:active{background:rgba(255,255,255,.18)}.tb.on{background:var(--orange);color:#1a0c00}
+.tb svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+/* 알약 탭 */
+#pills{display:flex;gap:6px;padding:6px 12px 8px;overflow-x:auto;scrollbar-width:none;align-items:center;flex-shrink:0}#pills::-webkit-scrollbar{display:none}
+.pill{flex-shrink:0;padding:7px 13px;border-radius:999px;background:var(--pill);color:var(--ink2);font-weight:600;font-size:13px;white-space:nowrap;max-width:150px;overflow:hidden;text-overflow:ellipsis}
+.pill.on{background:var(--pillon);color:var(--onpill)}.pill.add{color:var(--orange2);border:1px dashed rgba(255,180,92,.5);background:transparent}
+#search{display:flex;align-items:center;gap:8px;margin:0 12px 8px;padding:8px 12px;border-radius:12px;background:var(--glass2);border:1px solid var(--line)}
+#search input{flex:1;background:transparent;border:none;color:var(--ink);font:inherit;outline:none;min-width:0}#search input::placeholder{color:var(--muted)}
+#plbar{display:flex;align-items:center;gap:8px;margin:0 12px 8px;padding:8px 10px 8px 12px;border-radius:12px;background:var(--glass2);border:1px solid var(--line);font-size:12.5px;color:var(--ink2)}
+#plbar b{color:var(--ink);font-size:13.5px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.small{padding:6px 11px;border-radius:999px;background:var(--pill);font-size:12px;font-weight:600;color:var(--ink)}.small.pri{background:var(--orange);color:#1a0c00}
+/* 격자 */
+#grid{flex:1;overflow-y:auto;padding:4px 10px 170px;display:grid;grid-template-columns:repeat(4,1fr);gap:6px 4px;align-content:start;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.15) transparent}
+.tile{position:relative;display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 2px 4px;border-radius:12px;border:2px solid transparent;text-align:center;cursor:pointer}
+.tile:active{background:var(--glass2)}
+.tile .ic{width:64px;height:64px;position:relative;filter:drop-shadow(0 4px 6px rgba(0,0,0,.45))}
+.tile .ic svg{width:100%;height:100%}
+.tile .cap{font-size:11.5px;line-height:1.25;color:var(--ink2);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;word-break:break-all;min-height:2.5em;padding:0 2px}
+.tile.sel{border-color:var(--orange);background:rgba(255,138,31,.10)}
+.tile.sel::after{content:"✓";position:absolute;top:4px;right:6px;width:18px;height:18px;border-radius:50%;background:var(--orange);color:#1a0c00;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center}
+.tile.playing .ic{filter:drop-shadow(0 0 10px var(--orange2)) drop-shadow(0 4px 6px rgba(0,0,0,.45))}
+.tile.playing .cap{color:var(--orange2);font-weight:700}
+.tile .no{position:absolute;top:2px;left:6px;font-size:10px;color:var(--muted);font-family:ui-monospace,Consolas,monospace}
+.tile .badge{position:absolute;bottom:38px;right:8px;font-size:10px;padding:1px 5px;border-radius:6px;background:rgba(0,0,0,.55);color:var(--ink2)}
+.tile.broken .cap{color:var(--muted);text-decoration:line-through}
+.empty{grid-column:1/-1;padding:40px 10px;text-align:center;color:var(--muted);font-size:13px}
+/* 선택 막대 */
+#selbar{position:fixed;left:12px;right:12px;bottom:118px;display:flex;align-items:center;gap:6px;padding:8px 10px;border-radius:14px;background:rgba(255,138,31,.92);color:#1a0c00;box-shadow:0 8px 24px rgba(0,0,0,.45);font-weight:700;font-size:13px;z-index:5}
+#selbar .grow{flex:1}#selbar button{padding:6px 9px;border-radius:999px;background:rgba(0,0,0,.14);font-weight:700;font-size:12.5px}#selbar button:active{background:rgba(0,0,0,.28)}
+/* 플레이어 */
+#player{position:fixed;left:0;right:0;bottom:0;padding:10px 14px 12px;background:linear-gradient(180deg,rgba(5,10,24,0) 0%,rgba(5,10,24,.96) 24%);z-index:4}
+#pcard{border-radius:18px;background:var(--glass);border:1px solid var(--line);backdrop-filter:blur(10px);padding:10px 12px 10px;box-shadow:0 10px 30px rgba(0,0,0,.45)}
+#nowT{font-weight:700;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}#nowS{font-size:11.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-height:1.4em}
+#bar{height:4px;border-radius:2px;background:rgba(255,255,255,.12);margin:8px 0 6px;overflow:hidden}#bar i{display:block;height:100%;width:0;background:var(--orange);border-radius:2px;transition:width .4s linear}
+#times{display:flex;justify-content:space-between;font-size:10.5px;color:var(--muted);font-family:ui-monospace,Consolas,monospace}
+#ctl{display:flex;align-items:center;justify-content:center;gap:10px;margin-top:4px}
+#ctl .tb{width:38px;height:38px}#ctl .tb.big{width:54px;height:54px;background:var(--orange);color:#1a0c00}#ctl .tb.big svg{width:24px;height:24px}
+#instSel{margin-top:8px;width:100%;padding:7px 10px;border-radius:10px;background:var(--glass2);border:1px solid var(--line);color:var(--ink2);font:inherit;font-size:12.5px;outline:none}
+#toast{position:fixed;inset:auto;left:50%;top:12px;transform:translateX(-50%);margin:0;width:max-content;max-width:92%;padding:9px 14px;border-radius:12px;background:rgba(255,111,156,.18);border:1px solid rgba(255,111,156,.45);color:var(--ink);font-size:12.5px;backdrop-filter:blur(8px);box-shadow:0 8px 24px rgba(0,0,0,.4)}
+#toast.ok{background:rgba(94,230,160,.16);border-color:rgba(94,230,160,.45)}
+dialog{border:none;border-radius:16px;background:#101c36;color:var(--ink);padding:16px;width:min(92vw,360px);box-shadow:0 20px 60px rgba(0,0,0,.6)}dialog::backdrop{background:rgba(0,0,0,.55)}
+dialog input{width:100%;padding:9px 11px;border-radius:10px;border:1px solid var(--line);background:var(--glass2);color:var(--ink);font:inherit;outline:none;margin:10px 0 12px}
+dialog .row{display:flex;justify-content:flex-end;gap:6px}
+.menu{position:fixed;z-index:9;background:#101c36;border:1px solid var(--line);border-radius:12px;padding:6px;box-shadow:0 12px 40px rgba(0,0,0,.6);min-width:160px}
+.menu div{padding:9px 12px;border-radius:8px;font-size:13px}.menu div:active{background:var(--glass2)}.menu div.hd{color:var(--muted);font-size:11px;cursor:default}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute"><defs>
+<symbol id="ic-scroll" viewBox="0 0 64 64">
+  <path d="M14 10h32a6 6 0 0 1 6 6v34a4 4 0 0 1-4 4H16a6 6 0 0 1-6-6V16a6 6 0 0 1 6-6z" fill="var(--paper)"/>
+  <path d="M10 16a6 6 0 0 1 6-6h4v44h-4a6 6 0 0 1-6-6z" fill="var(--paper2)"/>
+  <path d="M46 10a6 6 0 0 1 6 6v3H40v-3a6 6 0 0 1 6-6z" fill="var(--paper2)"/>
+  <rect x="40" y="19" width="12" height="3" fill="var(--paperline)" opacity=".5"/>
+  <path d="M24 26h20M24 32h20M24 38h20M24 44h14" stroke="var(--paperline)" stroke-width="1.6" stroke-linecap="round" opacity=".55"/>
+  <path d="M36 22v14a4 4 0 1 1-2.2-3.57V26l-6 1.5V40a4 4 0 1 1-2.2-3.57V25l10.4-3z" fill="#2b2418"/>
+</symbol>
+<symbol id="ic-play" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" fill="currentColor" stroke="none"/></symbol>
+<symbol id="ic-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" stroke="none"/></symbol>
+<symbol id="ic-next" viewBox="0 0 24 24"><path d="M5 5v14l10-7z" fill="currentColor" stroke="none"/><rect x="17" y="5" width="2.5" height="14" fill="currentColor" stroke="none"/></symbol>
+<symbol id="ic-prev" viewBox="0 0 24 24"><path d="M19 5v14L9 12z" fill="currentColor" stroke="none"/><rect x="4.5" y="5" width="2.5" height="14" fill="currentColor" stroke="none"/></symbol>
+<symbol id="ic-shuffle" viewBox="0 0 24 24"><path d="M16 3h5v5M4 20l17-17M21 16v5h-5M15 15l6 6M4 4l5 5"/></symbol>
+<symbol id="ic-repeat1" viewBox="0 0 24 24"><path d="M17 2l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14M7 22l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/><path d="M11 10h2v5" /></symbol>
+<symbol id="ic-refresh" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></symbol>
+<symbol id="ic-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></symbol>
+<symbol id="ic-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6" fill="currentColor"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/><circle cx="19" cy="12" r="1.6" fill="currentColor"/></symbol>
+</defs></svg>
+
+<div id="app">
+  <div id="top">
+    <div class="brand"><b>모비폴리오</b><small>MINI</small></div>
+    <span class="dot" id="cliDot" title="CLI 상태"></span>
+    <button class="tb" id="btnSearch" title="검색"><svg><use href="#ic-search"/></svg></button>
+    <button class="tb" id="btnSync" title="갱신"><svg><use href="#ic-refresh"/></svg></button>
+  </div>
+  <div id="pills"></div>
+  <div id="search" hidden><svg style="width:16px;height:16px;fill:none;stroke:var(--muted);stroke-width:2"><use href="#ic-search"/></svg><input id="q" placeholder="제목·아티스트 검색"><button class="small" id="qClear">지우기</button></div>
+  <div id="plbar" hidden><b id="plName"></b><span id="plMeta"></span><button class="small pri" id="plPlay">▶ 전체</button><button class="tb" id="plMore" style="width:30px;height:30px"><svg><use href="#ic-more"/></svg></button></div>
+  <div id="grid"></div>
+</div>
+
+<div id="selbar" hidden><span id="selN">선택 0</span><span class="grow"></span><button id="bPlay">▶ 재생</button><button id="bAdd">+ 담기</button><button id="bUp" hidden>▲</button><button id="bDown" hidden>▼</button><button id="bRemove" hidden>제거</button><button id="bClear">✕</button></div>
+
+<div id="player"><div id="pcard">
+  <div id="nowT">대기</div><div id="nowS">곡을 두 번 누르면 바로 연주 · 한 번 누르면 선택</div>
+  <div id="bar"><i id="prog"></i></div><div id="times"><span id="tEl">0:00</span><span id="tTot">0:00</span></div>
+  <div id="ctl">
+    <button class="tb" id="btnShuffle" title="셔플"><svg><use href="#ic-shuffle"/></svg></button>
+    <button class="tb" id="btnPrev" title="이전"><svg><use href="#ic-prev"/></svg></button>
+    <button class="tb big" id="btnMain" title="재생/정지"><svg id="mainIcon"><use href="#ic-play"/></svg></button>
+    <button class="tb" id="btnNext" title="다음"><svg><use href="#ic-next"/></svg></button>
+    <button class="tb" id="btnRepeat" title="한 곡 반복"><svg><use href="#ic-repeat1"/></svg></button>
+  </div>
+  <select id="instSel"><option value="">악기 그대로</option></select>
+</div></div>
+
+<div id="toast" popover="manual"></div>
+<dialog id="dlg"><div id="dlgTitle" style="font-weight:700"></div><input id="dlgInput"><div class="row"><button class="small" id="dlgCancel">취소</button><button class="small pri" id="dlgOk">확인</button></div></dialog>
+
+<script>
+const $=(id)=>document.getElementById(id);
+const TOKEN="__MOBIFOLIO_TOKEN__";
+const api=async(path,body)=>{try{const r=await fetch(path,{method:body?"POST":"GET",headers:{"Content-Type":"application/json","X-Requested-With":"mobifolio","X-MobiFolio-Token":TOKEN},body:body?JSON.stringify(body):undefined});const j=await r.json();if(j&&typeof j==="object"&&!("ok"in j)&&r.ok)return j;if(!r.ok&&j&&typeof j==="object"&&!("ok"in j))j.ok=false;return j;}catch(e){return {ok:false,error:"network",message:String(e.message||e)};}};
+const esc=(s)=>String(s??"").replace(/[&<>"]/g,(c)=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const fmtSec=(s)=>{s=Math.max(0,Math.floor(s||0));return `${Math.floor(s/60)}:${String(s%60).padStart(2,"0")}`;};
+function toast(msg,ms=4000,kind=""){const t=$("toast");t.className=kind;t.textContent=msg;try{if(!t.matches(":popover-open"))t.showPopover();}catch{}clearTimeout(t._t);t._t=setTimeout(()=>{try{t.hidePopover();}catch{}},ms);}
+window.addEventListener("pagehide",()=>{try{navigator.sendBeacon("/api/bye",new Blob([JSON.stringify({token:TOKEN})],{type:"application/json"}));}catch{}});
+(async function hold(){for(;;){try{const r=await fetch("/api/hold",{headers:{"X-Requested-With":"mobifolio","X-MobiFolio-Token":TOKEN},cache:"no-store"});const rd=r.body.getReader();while(!(await rd.read()).done){}}catch{}await new Promise((res)=>setTimeout(res,1000));}})();
+window.addEventListener("error",(e)=>toast("오류: "+(e.message||"")));window.addEventListener("unhandledrejection",(e)=>toast("오류: "+(e.reason&&e.reason.message||e.reason||"")));
+const tkey=(s)=>String(s||"").replace(/^악보\s*[:：]\s*/,"").toLowerCase().replace(/[\s\-_·•.,()\[\]{}~!?/\\|:;"'`+*&%$#@^=<>【】「」『』〈〉《》]+/g,"");
+
+let S={all:[],byKey:new Map(),byTitle:new Map(),titleSet:new Set(),lists:[],instruments:[],settings:{},view:{kind:"lib"},q:"",selected:new Set(),
+  queue:[],order:[],qi:-1,src:"",shuffle:false,repeat:"off",now:null,playing:false,pollT:null,startedAt:0,advancing:false,manualStop:false,gapT:null,switching:false,gen:0,
+  instrument:"",cliOk:false,ens:{on:false,leader:null,reason:"",at:0}};
+const libOf=(x)=>x?(S.byKey.get(x.key)||S.byTitle.get(x.title)||null):null;
+function ask(title,def=""){return new Promise((res)=>{$("dlgTitle").textContent=title;$("dlgInput").value=def;$("dlg").returnValue="";$("dlg").onclose=()=>res($("dlg").returnValue==="ok"?$("dlgInput").value.trim():null);$("dlg").showModal();$("dlgInput").select();});}
+$("dlgOk").onclick=()=>$("dlg").close("ok");$("dlgCancel").onclick=()=>$("dlg").close("cancel");$("dlgInput").onkeydown=(e)=>{if(e.key==="Enter")$("dlg").close("ok");};
+function menu(e,items){closeMenu();const m=document.createElement("div");m.className="menu";m.innerHTML=items.map(([t,fn])=>`<div class="${fn?"":"hd"}">${esc(t)}</div>`).join("");[...m.children].forEach((c,i)=>{if(items[i][1])c.onclick=()=>{m.remove();items[i][1]();};});document.body.appendChild(m);
+  const x=Math.min(e.clientX,window.innerWidth-m.offsetWidth-8),y=Math.min(e.clientY,window.innerHeight-m.offsetHeight-8);m.style.left=Math.max(8,x)+"px";m.style.top=Math.max(8,y)+"px";setTimeout(()=>document.addEventListener("click",closeMenu,{once:true}),0);}
+function closeMenu(){document.querySelectorAll(".menu").forEach((m)=>m.remove());}
+
+/* ── 데이터 ── */
+async function refreshState(){const s=await api("/api/state");if(!s||!s.scores){$("cliDot").className="dot off";S.cliOk=false;return;}const c=s.cli||{};S.cliOk=!!(c.found&&c.pipe==="connected");$("cliDot").className="dot "+(S.cliOk?"on":"off");$("cliDot").title=S.cliOk?"CLI 연결됨":"CLI 끊김 — 게임을 켜고 CLI 옵션을 켜세요";}
+async function loadAll(){const [sc,ls,ins,st]=await Promise.all([api("/api/scores"),api("/api/playlists"),api("/api/instruments"),api("/api/settings?nocli=1")]);
+  if(!sc||!sc.items||!ls||!ls.playlists||!ins||!ins.items||!st||!st.settings){toast("서버에서 데이터를 받지 못했습니다");return;}
+  S.all=sc.items;S.byKey=new Map(sc.items.map((i)=>[i.key,i]));S.byTitle=new Map();for(const i of sc.items)if(!S.byTitle.has(i.title))S.byTitle.set(i.title,i);S.titleSet=new Set(sc.items.map((i)=>tkey(i.title)));
+  S.lists=ls.playlists;S.instruments=ins.items;S.settings=st.settings;
+  const sel=$("instSel");sel.innerHTML=`<option value="">${esc(S.settings.default_inst?`기본 악기 (${S.settings.default_inst})`:"악기 그대로")}</option>`+S.instruments.map((i)=>`<option value="${esc(i.name)}">${esc((i.cliBroken?"⚠ ":"")+i.name)}${i.equipped?" · 장착":""}</option>`).join("");sel.value=S.instruments.some((i)=>i.name===S.instrument)?S.instrument:"";
+  render();}
+async function listsApi(body){const r=await api("/api/playlists",body);if(r&&r.playlists)S.lists=r.playlists;if(!r||r.ok===false)toast("재생목록 저장 실패: "+(r&&(r.message||r.error)||""));return r;}
+
+/* ── 렌더 ── */
+function currentItems(){const v=S.view;let items=S.all;
+  if(v.kind==="pl"){const pl=S.lists.find((p)=>p.id===v.id);items=pl?pl.items.map((it,k)=>({...(libOf(it)||{title:it.title,song:it.title,cleaned:it.title,artist:"",missing:true}),key:it.key,plInst:it.inst,plIndex:k})):[];}
+  if(v.kind==="recent")items=[...S.all.filter((i)=>i.lastPlayed)].sort((a,b)=>b.lastPlayed-a.lastPlayed);
+  if(S.q){const qt=S.q.toLowerCase().split(/\s+/).filter(Boolean);items=items.filter((i)=>qt.every((t)=>(i.norm||"").includes(t.replace(/[\s\-_.]/g,""))||(i.artist||"").toLowerCase().includes(t)||(i.title||"").toLowerCase().includes(t)));}
+  return items;}
+function render(){renderPills();renderGrid();renderSel();}
+function renderPills(){const v=S.view;const p=$("pills");
+  p.innerHTML=`<button class="pill ${v.kind==="lib"?"on":""}" data-v="lib">전체 <span style="opacity:.6">${S.all.length}</span></button><button class="pill ${v.kind==="recent"?"on":""}" data-v="recent">최근</button>`+
+    S.lists.map((pl)=>`<button class="pill ${v.kind==="pl"&&v.id===pl.id?"on":""}" data-pl="${esc(pl.id)}">♪ ${esc(pl.name)} <span style="opacity:.6">${pl.items.length}</span></button>`).join("")+`<button class="pill add" id="plNew">+ 목록</button>`;
+  p.querySelectorAll("[data-v]").forEach((b)=>b.onclick=()=>setView({kind:b.dataset.v}));p.querySelectorAll("[data-pl]").forEach((b)=>b.onclick=()=>setView({kind:"pl",id:b.dataset.pl}));
+  $("plNew").onclick=async()=>{const name=await ask("새 재생목록 이름","새 재생목록");if(name===null)return;await listsApi({op:"create",name:name||"새 재생목록"});const pl=S.lists.at(-1);const keys=[...S.selected];if(keys.length&&pl)await listsApi({op:"add",id:pl.id,keys});S.selected.clear();setView({kind:"pl",id:pl.id});};
+  const on=p.querySelector(".pill.on");if(on)on.scrollIntoView({inline:"nearest",block:"nearest"});
+  const pl=v.kind==="pl"?S.lists.find((x)=>x.id===v.id):null;$("plbar").hidden=!pl;
+  if(pl){$("plName").textContent=pl.name;const dur=pl.items.reduce((a,it)=>a+((libOf(it)||{}).duration||0),0);$("plMeta").textContent=`${pl.items.length}곡${dur?" · "+fmtSec(dur):""}`;
+    $("plPlay").onclick=()=>playFrom(pl.items.map((it)=>({...it})),0,"pl:"+pl.id);
+    $("plMore").onclick=(e)=>menu(e,[[pl.name,null],["이름 변경",async()=>{const n=await ask("이름 변경",pl.name);if(n===null||!n)return;await listsApi({op:"rename",id:pl.id,name:n});render();}],["목록 삭제",async()=>{if(!confirm(`「${pl.name}」을 삭제할까요?`))return;await listsApi({op:"delete",id:pl.id});setView({kind:"lib"});}]]);}}
+function setView(v){S.view=v;S.selected.clear();render();$("grid").scrollTop=0;}
+function tileHtml(it,i){const playing=S.now&&S.now.key===it.key&&S.playing;const sel=S.selected.has(it.key);
+  return `<div class="tile ${sel?"sel":""} ${playing?"playing":""} ${it.cliBroken?"broken":""}" data-k="${esc(it.key)}" title="${esc(it.title)}${it.artist?" · "+esc(it.artist):""}${it.cliBroken?" · 이름 끝 공백 때문에 CLI 가 찾지 못함":""}">
+    ${S.view.kind==="pl"?`<span class="no">${i+1}</span>`:""}<div class="ic"><svg><use href="#ic-scroll"/></svg></div>${it.plInst?`<span class="badge">${esc(it.plInst)}</span>`:(it.dupNo?`<span class="badge">#${it.dupNo}</span>`:"")}
+    <div class="cap">${esc(it.missing?"(없음) "+it.title:it.title)}</div></div>`;}
+function renderGrid(){const items=currentItems();S._items=items;const g=$("grid");const st=g.scrollTop;
+  g.innerHTML=items.length?items.map(tileHtml).join(""):`<div class="empty">${S.all.length?"조건에 맞는 악보가 없습니다":"아직 악보가 없습니다 — 게임을 켜고 위의 갱신을 누르세요"}</div>`;g.scrollTop=st;
+  g.querySelectorAll(".tile").forEach((t)=>{const k=t.dataset.k;
+    t.onclick=()=>{if(S.selected.has(k))S.selected.delete(k);else S.selected.add(k);t.classList.toggle("sel",S.selected.has(k));renderSel();};
+    t.ondblclick=(e)=>{e.preventDefault();S.selected.delete(k);const list=items.map((x)=>({key:x.key,title:x.title,inst:x.plInst||""}));playFrom(list,list.findIndex((x)=>x.key===k),S.view.kind==="pl"?"pl:"+S.view.id:"view");};
+    t.oncontextmenu=(e)=>{e.preventDefault();const it=S.byKey.get(k)||items.find((x)=>x.key===k);const m=[[it?it.title:k,null],["▶ 지금 연주",()=>playFrom([{key:k,title:it.title,inst:it.plInst||""}],0,"single")],["+ 재생목록에 담기",()=>addMenu(e,[k])]];
+      if(S.view.kind==="pl"){m.push(["이 곡 악기 지정…",()=>instMenu(e,S.view.id,k)]);m.push(["목록에서 제거",async()=>{await listsApi({op:"remove",id:S.view.id,keys:[k]});render();}]);}menu(e,m);};});}
+function renderSel(){const n=S.selected.size;$("selbar").hidden=!n;if(!n)return;$("selN").textContent=`선택 ${n}`;const inPl=S.view.kind==="pl";$("bRemove").hidden=!inPl;$("bUp").hidden=$("bDown").hidden=!(inPl&&n===1);
+  document.querySelectorAll(".tile").forEach((t)=>t.classList.toggle("sel",S.selected.has(t.dataset.k)));}
+const selItems=()=>(S._items||[]).filter((i)=>S.selected.has(i.key));
+$("bClear").onclick=()=>{S.selected.clear();renderSel();};
+$("bPlay").onclick=()=>{const list=selItems().map((it)=>({key:it.key,title:it.title,inst:it.plInst||""}));S.selected.clear();renderSel();if(list.length)playFrom(list,0,"view");};
+$("bAdd").onclick=(e)=>addMenu(e,selItems().map((i)=>i.key));
+$("bRemove").onclick=async()=>{await listsApi({op:"remove",id:S.view.id,keys:[...S.selected]});S.selected.clear();render();};
+async function move(dir){const pl=S.lists.find((p)=>p.id===S.view.id);if(!pl)return;const keys=pl.items.map((x)=>x.key);const k=[...S.selected][0];const i=keys.indexOf(k);const j=i+dir;if(i<0||j<0||j>=keys.length)return;keys.splice(j,0,keys.splice(i,1)[0]);await listsApi({op:"reorder",id:pl.id,items:keys});render();}
+$("bUp").onclick=()=>move(-1);$("bDown").onclick=()=>move(1);
+function addMenu(e,keys){if(!keys.length)return;menu(e,[[`${keys.length}곡 담기`,null]].concat(S.lists.map((p)=>[`♪ ${p.name} (${p.items.length})`,async()=>{await listsApi({op:"add",id:p.id,keys});S.selected.clear();render();toast(`「${p.name}」에 담았습니다`,2500,"ok");}])).concat([["+ 새 재생목록에",async()=>{const name=await ask("새 재생목록 이름","새 재생목록");if(name===null)return;await listsApi({op:"create",name:name||"새 재생목록"});const pl=S.lists.at(-1);await listsApi({op:"add",id:pl.id,keys});S.selected.clear();setView({kind:"pl",id:pl.id});}]]));}
+function instMenu(e,plId,key){menu(e,[["이 곡의 악기",null],["그대로",async()=>{await listsApi({op:"set_inst",id:plId,key,inst:""});render();}]].concat(S.instruments.map((i)=>[(i.cliBroken?"⚠ ":"")+i.name,async()=>{await listsApi({op:"set_inst",id:plId,key,inst:i.name});render();}])));}
+$("btnSearch").onclick=()=>{const s=$("search");s.hidden=!s.hidden;if(!s.hidden)$("q").focus();else{S.q="";$("q").value="";renderGrid();}};
+$("q").oninput=()=>{S.q=$("q").value;clearTimeout(S._qt);S._qt=setTimeout(renderGrid,120);};$("qClear").onclick=()=>{S.q="";$("q").value="";renderGrid();$("q").focus();};
+$("btnSync").onclick=async()=>{const b=$("btnSync");b.disabled=true;b.classList.add("on");try{const r=await api("/api/sync",{});await refreshState();await loadAll();if(!r.ok){const bad=(r.steps||[]).find((s)=>!s.ok||s.error)||{};toast("갱신 실패: "+(bad.message||r.message||bad.error||r.error||""));}else toast(`악보 ${S.all.length}곡 · 악기 ${S.instruments.length}개`,2500,"ok");}finally{b.disabled=false;b.classList.remove("on");}};
+$("instSel").onchange=()=>{S.instrument=$("instSel").value;};
+
+/* ── 재생 (정식판과 같은 규칙: 곡 끝 여유·곡 사이 대기·합주 인식) ── */
+const qOrder=()=>S.order.length?S.order:S.queue.map((_,i)=>i);const qPos=()=>qOrder().indexOf(S.qi);
+function makeOrder(){const idx=S.queue.map((_,i)=>i);if(!S.shuffle){S.order=idx;return;}const cur=S.qi;const rest=idx.filter((i)=>i!==cur);for(let i=rest.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[rest[i],rest[j]]=[rest[j],rest[i]];}S.order=cur>=0?[cur,...rest]:rest;}
+const ensReset=()=>{S.ens={on:false,leader:null,reason:"",at:0};};const ensRemain=()=>S.ens.leader?S.ens.leader.rem-(Date.now()-S.ens.leader.at)/1000:null;
+async function checkEnsemble(p,gen){S.ens.at=Date.now();const e=await api("/api/ensemble");if(gen!==S.gen||!S.playing||!e||!e.ok||!Array.isArray(e.players))return;const myT=tkey(p.MusicTitle);if(!myT)return;
+  const same=e.players.filter((x)=>x.playing&&tkey(x.title)===myT&&(Number(x.channels)||0)>1);const notMine=!S.titleSet.has(myT);const on=same.length>0||notMine;const was=S.ens.on;
+  let leader=null;for(const x of same){const rem=x.remaining!=null?Number(x.remaining):(Number(x.total)||0)-(Number(x.elapsed)||0);if(!(rem>=0))continue;if(!leader||rem<leader.rem)leader={name:x.name,rem,at:Date.now()};}
+  S.ens={on,leader,reason:same.length?"같은 곡 · 다채널":(notMine?"보관함에 없는 곡":""),at:Date.now()};if(on&&!was)toast(`합주로 인식 (${S.ens.reason}) — 상대 곡이 끝나면 함께 멈춥니다`,5000,"ok");}
+async function playFrom(list,index,src){if(S.switching||!list.length||index<0)return;S.queue=list.map((x)=>({key:x.key||x.title,title:x.title,inst:x.inst||""}));S.qi=index;S.src=src;makeOrder();await playIndex(index);}
+async function playIndex(i){if(S.switching)return;clearTimeout(S.gapT);S.gapT=null;const it=S.queue[i];if(!it)return;S.switching=true;S.gen++;S.qi=i;S.manualStop=false;ensReset();try{
+  const lib=libOf(it);S.now={key:it.key,title:it.title,song:lib?(lib.song||lib.cleaned):it.title,artist:lib?lib.artist:""};
+  $("nowT").textContent=S.now.song;$("nowS").textContent="전송 중…";$("prog").style.width="0%";$("tEl").textContent="0:00";$("tTot").textContent=(lib&&lib.duration)?fmtSec(lib.duration):"0:00";
+  const r=await api("/api/play",{title:it.title,key:it.key,instrument:it.inst||S.instrument||null});S.playing=r.ok;S.startedAt=Date.now();S.lastRemain=null;
+  if(!r.ok){const msg=r.message||r.steps?.at(-1)?.message||r.error||"";$("nowS").textContent="실패: "+msg;clearInterval(S.pollT);S.pollT=null;setMain(false);S.failRun=(S.failRun||0)+1;
+    const fatal=["cli_not_found","disconnected","game_off","option_off","timeout","spawn_failed","network","forbidden"].includes(r.error||"");
+    if(fatal||S.failRun>Math.min(3,S.queue.length)){S.failRun=0;toast("재생 실패: "+msg);renderGrid();return;}if(S.queue.length>1)S.gapT=setTimeout(()=>advance(1),1500);return;}
+  S.failRun=0;setMain(true);startPoll();renderGrid();}finally{S.switching=false;}}
+function setMain(p){$("mainIcon").innerHTML=`<use href="#ic-${p?"stop":"play"}"/>`;}
+function startPoll(){clearInterval(S.pollT);S.pollT=setInterval(pollAct,1000);}
+async function advance(dir){if(S.advancing||S.switching)return;S.advancing=true;clearTimeout(S.gapT);S.gapT=null;try{let ord=qOrder();let pos=ord.indexOf(S.qi);
+  if(S.repeat==="one"&&dir===0){await playIndex(S.qi);return;}pos+=dir===0?1:dir;
+  if(pos>=ord.length){if(S.playing){S.manualStop=true;await api("/api/stop",{});}await stopAll("재생 끝");S.qi=ord[0]??-1;return;}
+  if(pos<0)pos=0;await playIndex(ord[pos]);}finally{S.advancing=false;}}
+async function stopAll(msg){clearInterval(S.pollT);S.pollT=null;clearTimeout(S.gapT);S.gapT=null;S.playing=false;setMain(false);ensReset();$("nowS").textContent=msg||"대기";$("prog").style.width="0%";renderGrid();}
+let pollBusy=false;
+async function pollAct(){if(S.switching||pollBusy)return;pollBusy=true;try{
+  if(!S.playing&&!S.gapT){clearInterval(S.pollT);S.pollT=null;return;}if(!S.playing)return;
+  const gen=S.gen;const a=await api("/api/activity");if(S.switching||gen!==S.gen||!S.pollT)return;
+  if(!a||!a.ok||!a.body||typeof a.body.Performance!=="object"){S.pollErr=(S.pollErr||0)+1;if(S.pollErr>=5){S.pollErr=0;await stopAll("CLI 응답 없음");}return;}
+  S.pollErr=0;const p=a.body.Performance||{};const s=S.settings;const sinceStart=(Date.now()-S.startedAt)/1000;
+  if(p.IsPlaying){const cached=(S.byTitle.get(S.now?.title)||{}).duration||0;const tot=p.TotalDurationSeconds||cached||0,el=p.ElapsedSeconds||0;
+    if(el>0&&S.startedAt>Date.now()-el*1000-1500)S.startedAt=Date.now()-el*1000;const localEl=(Date.now()-S.startedAt)/1000;S.lastRemain=tot?tot-el:null;
+    if(s.ensemble!==false&&sinceStart>3&&Date.now()-S.ens.at>10000)checkEnsemble(p,gen);const er=ensRemain();
+    $("nowS").textContent=`${S.ens.on?"합주 · ":""}${p.InstrumentName||""}${p.IsLoop?" · 반복 설정":""}${S.queue.length>1?` · ${qPos()+1}/${S.queue.length}`:""}${S.repeat==="one"?" · 한 곡 반복":""}${er!=null?` · 상대 남은 ${fmtSec(Math.max(0,er))}`:""}`;
+    $("tEl").textContent=fmtSec(el);$("tTot").textContent=fmtSec(tot);$("prog").style.width=(tot?Math.min(100,el/tot*100):0)+"%";
+    if(S.ens.on){if(er!=null&&er<=(s.advance_margin??2)){await api("/api/stop",{});if(gen!==S.gen||S.manualStop||!S.pollT)return;await stopAll("합주 종료 — 상대 곡에 맞춰 정지");}return;}
+    if(S.playing&&S.qi>=0&&tot&&!S.advancing&&((tot-el)<=(s.advance_margin??2)||localEl>=tot-1)){await api("/api/stop",{});if(gen!==S.gen||S.manualStop||!S.pollT)return;S.playing=false;const gap=(s.gap_sec??2)*1000;$("nowS").textContent=`다음 곡까지 ${s.gap_sec??2}초…`;clearTimeout(S.gapT);S.gapT=setTimeout(()=>advance(0),gap);}
+  }else if(S.playing){if(sinceStart<2.5)return;S.playing=false;if(S.manualStop){stopAll("정지됨");return;}if(S.ens.on){stopAll("합주 종료");return;}
+    if(S.lastRemain!=null&&S.lastRemain>(s.advance_margin??2)+5){stopAll("게임에서 정지됨");return;}
+    const gap=(s.gap_sec??2)*1000;$("nowS").textContent=S.queue.length>1||S.repeat!=="off"?`연주 종료 · ${s.gap_sec??2}초 후 다음`:"연주 종료";clearTimeout(S.gapT);S.gapT=setTimeout(()=>advance(0),gap);}
+  }finally{pollBusy=false;}}
+$("btnMain").onclick=async()=>{if(S.switching)return;if(S.playing||S.gapT){S.manualStop=true;clearTimeout(S.gapT);S.gapT=null;S.gen++;const r=S.playing?await api("/api/stop",{}):{ok:true};if(r.ok)await stopAll("정지됨");else{S.manualStop=false;$("nowS").textContent="정지 실패: "+(r.message||r.error||"");}}
+  else if(S.qi>=0&&S.queue[S.qi])await playIndex(S.qi);else{const k=[...S.selected][0];const it=k&&S.byKey.get(k);if(it)playFrom([{key:k,title:it.title,inst:""}],0,"single");else toast("곡을 두 번 누르거나, 선택한 뒤 ▶ 를 누르세요",3000);}};
+$("btnNext").onclick=()=>{if(!S.queue.length||S.switching||S.advancing)return;clearTimeout(S.gapT);S.gapT=null;advance(1);};
+$("btnPrev").onclick=async()=>{if(!S.queue.length||S.switching||S.advancing)return;clearTimeout(S.gapT);S.gapT=null;const el=(Date.now()-S.startedAt)/1000;if(S.playing&&el>4)await playIndex(S.qi);else advance(-1);};
+$("btnShuffle").onclick=()=>{S.shuffle=!S.shuffle;makeOrder();$("btnShuffle").classList.toggle("on",S.shuffle);};
+$("btnRepeat").onclick=()=>{S.repeat=S.repeat==="off"?"one":"off";$("btnRepeat").classList.toggle("on",S.repeat==="one");};
+
+/* ── 시작 ── */
+(async()=>{await refreshState();await loadAll();
+  if(S.settings.auto_sync&&S.cliOk)$("btnSync").click();
+  if(S.cliOk){const a=await api("/api/activity");const p=a&&a.ok&&a.body&&a.body.Performance;if(p&&p.IsPlaying){S.now={key:"",title:"",song:p.MusicTitle||"게임에서 재생 중",artist:""};S.playing=true;S.startedAt=Date.now()-(p.ElapsedSeconds||0)*1000;S.gen++;$("nowT").textContent=S.now.song;$("nowS").textContent="게임에서 재생 중";setMain(true);startPoll();}}
+  setInterval(refreshState,15000);})();
+</script>
+</body>
+</html>
