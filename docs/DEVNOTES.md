@@ -1,6 +1,6 @@
 # MobiFolio 개발 메모 (DEVNOTES)
 
-사용자용 안내는 저장소 루트의 README.md 에 있다. 이 문서는 개발·보안·배포의 세부 규칙과 실측 기록이다.
+사용자용 안내는 저장소 루트의 README.md 에 있다. 이 문서는 개발·보안·배포의 세부 규칙과 실측 기록이다. (2026-09-18 정리 이후 스크립트는 `scripts/`, 데모는 `demo/`, 버전 리소스는 `packaging/` 에 있다 — 아래 본문의 `build.cmd`·`release.cmd`·`version_info.txt` 는 그 안의 파일을 가리킨다.)
 
 > MobiFolio 는 비공식 팬 프로젝트로, NEXON·devCAT 과 무관하며 이들의 보증을 받지 않았습니다. 마비노기 모바일 및 관련 표장은 각 권리자의 상표입니다.
 

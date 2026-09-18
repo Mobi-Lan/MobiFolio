@@ -1,8 +1,8 @@
 @echo off
 rem Release: copy the packaged app into release\, zip it, build the NSIS installer, write SHA256 sums. (ASCII only)
-rem Prerequisite: build.cmd has produced dist-electron\MobiFolio-win32-x64.  Usage: release.cmd [--nopause]
+rem Prerequisite: build.cmd has produced dist-electron\MobiFolio-win32-x64.  Usage: scripts\release.cmd [--nopause]  (runs from the repo root)
 chcp 65001 >nul
-cd /d "%~dp0"
+cd /d "%~dp0.."
 set "NOPAUSE="
 if /i "%~1"=="--nopause" set "NOPAUSE=1"
 set "SRC=dist-electron\MobiFolio-win32-x64"
@@ -11,7 +11,7 @@ for /f "tokens=2 delims=:, " %%V in ('findstr /c:"\"version\"" app\package.json'
 set "OUT=release"
 rem Public site URL and the promo folder (site\ is what gets deployed). Override with env vars if they move.
 if not defined MF_UPDATE_BASE set "MF_UPDATE_BASE=https://fo.mobimml.com"
-if not defined MF_PROMO_DIR set "MF_PROMO_DIR=%~dp0..\MobiFolio_promo"
+if not defined MF_PROMO_DIR set "MF_PROMO_DIR=%~dp0..\..\MobiFolio_promo"
 if not exist "%OUT%" mkdir "%OUT%"
 rem 1) portable copy + zip
 if exist "%OUT%\MobiFolio-win32-x64" rmdir /s /q "%OUT%\MobiFolio-win32-x64"
@@ -31,7 +31,7 @@ powershell -NoProfile -Command "$h=(Get-FileHash '%OUT%\MobiFolioLite-%VER%.exe'
 type "%OUT%\latest.json"
 rem 2c) promo site: copy exe + latest.json + SHA256SUMS, update _redirects and main.js (deploy MobiFolio_promo\site afterwards)
 set PYTHONUTF8=1
-python publish_promo.py --version %VER% --base %MF_UPDATE_BASE% --promo "%MF_PROMO_DIR%"
+python scripts\publish_promo.py --version %VER% --base %MF_UPDATE_BASE% --promo "%MF_PROMO_DIR%"
 rem 3) checksums
 powershell -NoProfile -Command "Get-ChildItem '%OUT%\*.exe','%OUT%\*.zip' | ForEach-Object { (Get-FileHash $_.FullName -Algorithm SHA256).Hash + '  ' + $_.Name } | Set-Content -Encoding ascii '%OUT%\SHA256SUMS.txt'"
 type "%OUT%\SHA256SUMS.txt"

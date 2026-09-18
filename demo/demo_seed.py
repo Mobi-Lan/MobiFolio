@@ -1,6 +1,6 @@
 """데모 데이터 씨앗 — 재생목록·곡 길이·최근 재생·아티스트 수동 지정을 데모 데이터 폴더에 깔아 둔다.
 
-`demo.cmd` 가 서버를 띄우기 전에 한 번 실행한다. 악보·악기 목록은 씨앗이 필요 없다 —
+`scripts/demo.cmd` 가 서버를 띄우기 전에 한 번 실행한다. 악보·악기 목록은 씨앗이 필요 없다 —
 데모 CLI(`demo_cli.py`)가 「갱신」 때 내려 준다.
 
 반드시 `MABI_DATA_DIR` 을 데모 전용 폴더로 두고 실행한다 (실제 보관함을 덮어쓰지 않게).
@@ -11,6 +11,7 @@ import os
 import sys
 import time
 
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))   # 저장소 루트의 store.py
 import demo_cli
 import store
 

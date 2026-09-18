@@ -1,6 +1,6 @@
 """릴리스 파일을 소개 페이지(MobiFolio_promo) 에 반영한다 — release.cmd 가 부른다.
 
-  python publish_promo.py --version 0.1.2 --base https://fo.mobimml.com --promo ..\\MobiFolio_promo
+  python scripts\\publish_promo.py --version 0.1.2 --base https://fo.mobimml.com --promo ..\\MobiFolio_promo
 
 하는 일:
   1. site/MobiFolioLite-<ver>.exe 복사 (+ promo 루트에도 사본)
@@ -19,6 +19,7 @@ import shutil
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.dirname(HERE)   # 저장소 루트 (이 파일은 scripts/ 에 있다)
 
 
 def sha256(p: str) -> str:
@@ -33,8 +34,8 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--version", required=True)
     ap.add_argument("--base", required=True, help="공개 주소 (예: https://fo.mobimml.com)")
-    ap.add_argument("--promo", default=os.path.join(HERE, "..", "MobiFolio_promo"))
-    ap.add_argument("--release", default=os.path.join(HERE, "release"))
+    ap.add_argument("--promo", default=os.path.join(ROOT, "..", "MobiFolio_promo"))
+    ap.add_argument("--release", default=os.path.join(ROOT, "release"))
     ap.add_argument("--notes", default="")
     a = ap.parse_args()
     ver, base = a.version, a.base.rstrip("/")

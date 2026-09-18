@@ -17,9 +17,11 @@ import time
 from dataclasses import dataclass, field
 
 CREATE_NO_WINDOW = 0x08000000
-# 데모 모드: 게임·CLI 없이 demo_cli.py 의 가짜 응답으로 UI 를 띄운다 (시연·스크린샷).
+# 데모 모드: 게임·CLI 없이 demo/demo_cli.py 의 가짜 응답으로 UI 를 띄운다 (시연·스크린샷).
 # 배포판(frozen)에서는 환경변수가 있어도 켜지지 않는다.
 DEMO = os.environ.get("MABI_DEMO") == "1" and not getattr(sys, "frozen", False)
+if DEMO:
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "demo"))   # demo/demo_cli.py
 DEMO_EXE = r"C:\Nexon\MabinogiMobile\MabinogiMobile_CLI.exe"
 EXE_CANDIDATES = [
     os.environ.get("MABI_CLI_EXE", "") if not getattr(sys, "frozen", False) or os.environ.get("MABI_DEV") == "1" else "",   # 배포판은 개발용 환경변수 무시

@@ -88,7 +88,7 @@
 - VirusTotal에서 70개 엔진 중 5~6개가 "의심"으로 표시합니다. 전부 기계학습 확률 판정이고, 이름 있는 악성코드와 일치한 것은 없습니다.
 - 원인은 두 가지입니다. 코드 서명이 없고(개인 개발자용 인증서는 연 십수만 원), 파이썬 프로그램을 exe 하나로 묶는 방식(PyInstaller)이 자기 자신을 임시 폴더에 풀어 실행하기 때문에 포장된 악성코드와 모양이 비슷합니다.
 - 다운로드 페이지에 각 파일의 SHA256이 있습니다. 받은 파일의 해시가 같으면 배포한 파일 그대로입니다.
-- Windows Defender가 격리하면 잠시 뒤 다시 받아 보거나, Defender에서 「허용」하세요. 릴리스마다 Microsoft에 오탐 신고를 하고 있습니다.
+- Windows Defender가 격리하면 Defender의 「보호 기록」에서 해당 파일을 「허용」한 뒤 다시 받으세요.
 
 ## 알아 둘 것
 
@@ -104,10 +104,10 @@
 ```bat
 git clone https://github.com/Mobi-Lan/MobiFolio.git
 cd MobiFolio
-run.cmd            :: 개발 실행 (http://127.0.0.1:19997, 브라우저로 열기)
-demo.cmd           :: 게임·CLI 없이 가짜 데이터로 UI 만 보기
-build.cmd          :: 경량판 dist\MobiFolioLite.exe + 정식판 dist-electron\MobiFolio-win32-x64\
-release.cmd        :: release\ 에 zip·설치기·latest.json·SHA256SUMS 생성
+scripts\run.cmd       :: 개발 실행 (http://127.0.0.1:19997, 브라우저로 열기)
+scripts\demo.cmd      :: 게임·CLI 없이 가짜 데이터로 UI 만 보기
+scripts\build.cmd     :: 경량판 dist\MobiFolioLite.exe + 정식판 dist-electron\MobiFolio-win32-x64\
+scripts\release.cmd   :: release\ 에 zip·설치기·latest.json·SHA256SUMS 생성
 ```
 
 - 백엔드는 파이썬 표준 라이브러리만 씁니다. UI는 `ui/index.html` 한 파일입니다.
@@ -122,9 +122,12 @@ server.py          로컬 HTTP 서버 · API · 재생 제어 · 경량판 창/�
 cli_transport.py   MabinogiMobile_CLI 호출 (인코딩·종료 코드·타임아웃)
 library.py         제목 정규화 · 아티스트 인식 · 초성 · 동명 채번 · 검색
 store.py           데이터 파일 (설정·재생목록·최근 재생·캐시) · 잠금 · 이전
-ui/index.html      화면 전부
-app/main.js        정식판 Electron 셸
-build.cmd · release.cmd · publish_promo.py   빌드·배포
+ui/                화면 전부 (index.html) · 로고
+app/               정식판 Electron 셸 (main.js · fuse.js · 아이콘)
+scripts/           run · demo · build · release · publish_promo
+packaging/         PyInstaller 버전 리소스 (정식판 · 경량판)
+demo/              데모 모드 가짜 CLI · 씨앗 데이터
+docs/              개발 메모 · QA 기록 · CLI 명령 카탈로그
 ```
 
 ## 기여
