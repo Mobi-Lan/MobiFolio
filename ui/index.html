@@ -100,6 +100,7 @@ svg.i.s{width:14px;height:14px;stroke-width:1.8}svg.i.l{width:20px;height:20px}
 .plhead .name{font-size:20px;font-weight:700;color:var(--strong);line-height:1.2;cursor:text}
 .plhead .memo{font-size:12px;color:var(--ink2);cursor:text}.plhead .memo.empty{color:var(--faint)}
 dialog{background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:12px;padding:16px;width:min(360px,92vw);max-width:92vw}
+#toast.ok{background:color-mix(in srgb,var(--ok) 16%,var(--card));border-color:rgba(74,222,128,.5)}
 #toast{position:fixed;inset:auto;left:50%;top:14px;transform:translateX(-50%);margin:0;width:max-content;z-index:60;background:color-mix(in srgb,var(--pink) 14%,var(--card));border:1px solid rgba(232,138,166,.45);color:var(--strong);padding:8px 14px;border-radius:9px;font-size:12.5px;max-width:80vw;box-shadow:0 10px 30px var(--shadow)}dialog::backdrop{background:var(--shadow)}
 .menu{position:fixed;background:var(--card);border:1px solid var(--line);border-radius:9px;padding:6px;z-index:40;min-width:200px;max-height:60vh;overflow:auto;box-shadow:0 10px 30px var(--shadow)}
 .menu div{padding:6px 10px;border-radius:6px;cursor:pointer;font-size:13px;white-space:nowrap}.menu div:hover{background:var(--card2)}.menu .hd{color:var(--faint);font-size:11px;cursor:default}.menu .hd:hover{background:transparent}
@@ -206,7 +207,7 @@ window.addEventListener("pagehide",()=>{try{navigator.sendBeacon("/api/bye",new 
 // 창이 살아 있는 동안 서버에 연결을 열어 둔다 (경량판 종료 판정). 타이머가 아니라 연결이라 최소화해도 유지되고, 끊기면 서버가 창 닫힘으로 본다
 (async function hold(){for(;;){try{const r=await fetch("/api/hold",{headers:{"X-Requested-With":"mobifolio","X-MobiFolio-Token":TOKEN},cache:"no-store"});const rd=r.body.getReader();while(!(await rd.read()).done){}}catch{}await new Promise((res)=>setTimeout(res,1000));}})();
 const api=async(path,body)=>{try{const r=await fetch(path,{method:body?"POST":"GET",headers:{"Content-Type":"application/json","X-Requested-With":"mobifolio","X-MobiFolio-Token":TOKEN},body:body?JSON.stringify(body):undefined});const j=await r.json();if(j&&typeof j==="object"&&!("ok"in j)&&r.ok)return j;if(!r.ok&&j&&typeof j==="object"&&!("ok"in j))j.ok=false;return j;}catch(e){return {ok:false,error:"network",message:String(e.message||e)};}};
-function toast(msg,ms=5000){const t=$("toast");t.textContent=msg;try{if(!t.matches(":popover-open"))t.showPopover();}catch{t.hidden=false;}clearTimeout(t._t);t._t=setTimeout(()=>{try{t.hidePopover();}catch{t.hidden=true;}},ms);}
+function toast(msg,ms=5000,kind=""){const t=$("toast");t.className=kind;t.textContent=msg;try{if(!t.matches(":popover-open"))t.showPopover();}catch{t.hidden=false;}clearTimeout(t._t);t._t=setTimeout(()=>{try{t.hidePopover();}catch{t.hidden=true;}},ms);}
 window.addEventListener("unhandledrejection",(e)=>{toast("오류: "+(e.reason&&e.reason.message||e.reason||"알 수 없음"));});
 window.addEventListener("error",(e)=>{toast("오류: "+(e.message||"알 수 없음"));});
 const esc=(s)=>String(s??"").replace(/[&<>"]/g,(c)=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -592,7 +593,7 @@ async function applyUpdate(box){if(!updInfo)return;const btn=box?$("sUpdGo"):$("
   const r=await api("/api/update/apply",{url:updInfo.url,sha256:updInfo.sha256,latest:updInfo.latest});
   if(r.ok&&r.port){updText(box,r.message+" 새 버전이 뜨면 이 창이 그대로 이어집니다…");if(!box)$("updLater").hidden=true;const origin=`http://127.0.0.1:${r.port}`;
     let ok=false;for(let i=0;i<40;i++){await new Promise((res)=>setTimeout(res,500));try{await fetch(origin+"/api/health",{mode:"no-cors",cache:"no-store"});ok=true;break;}catch{}}
-    if(ok){location.href=origin+"/";return;}
+    if(ok){location.href=origin+"/?updated="+encodeURIComponent(updInfo.latest||"");return;}
     updText(box,"업데이트가 완료되었습니다. 앱을 다시 실행해 주세요.");alert("업데이트가 완료되었습니다.\n새 창으로 자동 전환되지 않았으니 앱을 다시 실행해 주세요.");}
   else if(r.ok){updText(box,r.message);}
   else{if(btn)btn.disabled=false;updText(box,"업데이트 실패: "+(r.message||r.error||""));}}
@@ -601,6 +602,7 @@ $("sTest").onclick=async()=>{$("sCliHint").textContent="확인 중…";const d=a
 
 /* ── 시작 ── */
 (async()=>{ddMake($("instDd"),instItems,()=>S.instrument,(v)=>{S.instrument=v;});const st=await refreshState();await loadAll();await loadLog();
+  const qp=new URLSearchParams(location.search);if(qp.has("updated")){history.replaceState(null,"",location.pathname);api("/api/health").then((h)=>{toast(`업데이트가 완료되었습니다 · 현재 버전 v${(h&&h.version)||qp.get("updated")}`,10000,"ok");});}
   if(S.settings.auto_sync&&S.cliOk){$("btnSync").click();}
   if(S.settings.update_check&&S.settings.update_url){setTimeout(()=>checkUpdate(true),1500);}
   if(S.cliOk){const a=await api("/api/activity");const p=a&&a.ok&&a.body&&a.body.Performance;
