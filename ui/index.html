@@ -100,7 +100,7 @@ svg.i.s{width:14px;height:14px;stroke-width:1.8}svg.i.l{width:20px;height:20px}
 .plhead .name{font-size:20px;font-weight:700;color:var(--strong);line-height:1.2;cursor:text}
 .plhead .memo{font-size:12px;color:var(--ink2);cursor:text}.plhead .memo.empty{color:var(--faint)}
 dialog{background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:12px;padding:16px;width:min(360px,92vw);max-width:92vw}
-#toast{position:fixed;left:50%;top:14px;transform:translateX(-50%);z-index:60;background:color-mix(in srgb,var(--pink) 14%,var(--card));border:1px solid rgba(232,138,166,.45);color:var(--strong);padding:8px 14px;border-radius:9px;font-size:12.5px;max-width:80vw;box-shadow:0 10px 30px var(--shadow)}dialog::backdrop{background:var(--shadow)}
+#toast{position:fixed;inset:auto;left:50%;top:14px;transform:translateX(-50%);margin:0;width:max-content;z-index:60;background:color-mix(in srgb,var(--pink) 14%,var(--card));border:1px solid rgba(232,138,166,.45);color:var(--strong);padding:8px 14px;border-radius:9px;font-size:12.5px;max-width:80vw;box-shadow:0 10px 30px var(--shadow)}dialog::backdrop{background:var(--shadow)}
 .menu{position:fixed;background:var(--card);border:1px solid var(--line);border-radius:9px;padding:6px;z-index:40;min-width:200px;max-height:60vh;overflow:auto;box-shadow:0 10px 30px var(--shadow)}
 .menu div{padding:6px 10px;border-radius:6px;cursor:pointer;font-size:13px;white-space:nowrap}.menu div:hover{background:var(--card2)}.menu .hd{color:var(--faint);font-size:11px;cursor:default}.menu .hd:hover{background:transparent}
 .rcol{display:flex;flex-direction:column;gap:0;min-height:0}
@@ -110,6 +110,9 @@ dialog{background:var(--card);color:var(--ink);border:1px solid var(--line);bord
 .status.btn{cursor:pointer;padding:4px 8px;border-radius:7px;border:1px solid transparent}.status.btn:hover{border-color:var(--line);color:var(--ink2)}
 #logDlg{width:min(760px,92vw);padding:0}#logDlg .chd{border-radius:12px 12px 0 0}#logDlg #logBody{max-height:70vh;overflow:auto;padding:10px 12px}
 #updBar{display:flex;align-items:center;gap:10px;padding:7px 16px;background:var(--goldwash);border-bottom:1px solid var(--goldline);font-size:12.5px;color:var(--strong)}
+.updbox{margin-top:12px;display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:9px;border:1px solid var(--line);background:var(--panel);font-size:12.5px;color:var(--ink2)}
+.updbox .updtxt{flex:1;min-width:0}.updbox b{color:var(--strong)}.updbox.new{border-color:var(--goldline);background:var(--goldwash)}.updbox.ok{border-color:rgba(74,222,128,.35)}.updbox.bad{border-color:rgba(232,138,166,.45)}
+.updbox .dot{flex-shrink:0}.updbox.new .dot{background:var(--gold);box-shadow:0 0 7px var(--gold)}
 .frm{display:grid;grid-template-columns:150px 1fr;gap:10px 12px;align-items:center;font-size:13px}.frm label{color:var(--muted)}.frm .hint{grid-column:2;font-size:11.5px;color:var(--faint);margin-top:-6px}
 </style>
 </head>
@@ -173,7 +176,7 @@ dialog{background:var(--card);color:var(--ink);border:1px solid var(--line);bord
 </div>
 
 <dialog id="dlg"><form method="dialog" style="display:flex;flex-direction:column;gap:10px"><div id="dlgTitle" style="font-weight:600">이름</div><input id="dlgInput" style="width:100%"><div style="display:flex;justify-content:flex-end;gap:6px"><button type="button" id="dlgCancel">취소</button><button class="pri" value="ok">확인</button></div></form></dialog>
-<div id="toast" hidden></div>
+<div id="toast" popover="manual"></div>
 <dialog id="logDlg"><div class="chd">CLI 응답<span class="m" id="logMeta"></span><span class="grow"></span><button class="small ghost" id="btnRaw">원문</button><form method="dialog"><button class="small">닫기</button></form></div><div id="logBody"><div class="empty">아직 없음</div></div></dialog>
 <dialog id="rep" style="width:min(760px,92vw)"><div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><b>정규화 보고</b><span class="note" id="repMeta"></span><span class="grow"></span><form method="dialog"><button value="ok">닫기</button></form></div><div class="raw" id="repBody" style="max-height:70vh"></div></dialog>
 <dialog id="set" style="width:min(560px,92vw)"><div style="display:flex;align-items:center;gap:8px;margin-bottom:14px"><b>설정</b><span class="grow"></span><form method="dialog"><button value="cancel">닫기</button></form></div>
@@ -192,6 +195,7 @@ dialog{background:var(--card);color:var(--ink);border:1px solid var(--line);bord
     <label>시작 시 자동 갱신</label><label style="color:var(--ink2);display:flex;gap:8px;align-items:center"><input type="checkbox" id="sAuto"> CLI 연결돼 있으면 악기·악보를 다시 받음</label>
   </div>
   <div style="display:flex;justify-content:flex-end;align-items:center;gap:6px;margin-top:14px"><span id="sVer" class="num" style="margin-right:auto;font-size:11.5px;color:var(--muted)"></span><button id="sUpdNow" class="ghost" title="저장된 주소로 지금 확인">업데이트 확인</button><button id="sTest" class="ghost" title="위 경로로 CLI 를 호출해 봅니다 (저장하지 않음)">연결 확인</button><button id="sSave" class="pri">저장</button></div>
+  <div id="sUpdBox" class="updbox" hidden></div>
 </dialog>
 
 <script>
@@ -202,7 +206,7 @@ window.addEventListener("pagehide",()=>{try{navigator.sendBeacon("/api/bye",new 
 // 창이 살아 있는 동안 서버에 연결을 열어 둔다 (경량판 종료 판정). 타이머가 아니라 연결이라 최소화해도 유지되고, 끊기면 서버가 창 닫힘으로 본다
 (async function hold(){for(;;){try{const r=await fetch("/api/hold",{headers:{"X-Requested-With":"mobifolio","X-MobiFolio-Token":TOKEN},cache:"no-store"});const rd=r.body.getReader();while(!(await rd.read()).done){}}catch{}await new Promise((res)=>setTimeout(res,1000));}})();
 const api=async(path,body)=>{try{const r=await fetch(path,{method:body?"POST":"GET",headers:{"Content-Type":"application/json","X-Requested-With":"mobifolio","X-MobiFolio-Token":TOKEN},body:body?JSON.stringify(body):undefined});const j=await r.json();if(j&&typeof j==="object"&&!("ok"in j)&&r.ok)return j;if(!r.ok&&j&&typeof j==="object"&&!("ok"in j))j.ok=false;return j;}catch(e){return {ok:false,error:"network",message:String(e.message||e)};}};
-function toast(msg,ms=5000){const t=$("toast");t.textContent=msg;t.hidden=false;clearTimeout(t._t);t._t=setTimeout(()=>{t.hidden=true;},ms);}
+function toast(msg,ms=5000){const t=$("toast");t.textContent=msg;try{if(!t.matches(":popover-open"))t.showPopover();}catch{t.hidden=false;}clearTimeout(t._t);t._t=setTimeout(()=>{try{t.hidePopover();}catch{t.hidden=true;}},ms);}
 window.addEventListener("unhandledrejection",(e)=>{toast("오류: "+(e.reason&&e.reason.message||e.reason||"알 수 없음"));});
 window.addEventListener("error",(e)=>{toast("오류: "+(e.message||"알 수 없음"));});
 const esc=(s)=>String(s??"").replace(/[&<>"]/g,(c)=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -563,24 +567,35 @@ $("btnSync").onclick=async()=>{const b=$("btnSync"),html=b.innerHTML;b.disabled=
   finally{b.disabled=false;b.innerHTML=html;}};
 $("btnReport").onclick=async()=>{const d=await api("/api/normalize");const s=d.summary;$("repMeta").textContent=`${s.count}곡 · 인식 ${s.count-s.other} · 기타 ${s.other}`;$("repBody").textContent=d.rows.map((r)=>`${r.bucket==="other"?"기타":"인식"} ${r.rule.padEnd(6)} | ${r.title}\n      → 아티스트 [${r.artist}] 곡 [${r.song}]${r.variant?` 변형 ${r.variant}`:""}${r.tags.length?` 태그 ${r.tags.join(",")}`:""}${r.removed.length?` 제거 ${r.removed.join(" ")}`:""}`).join("\n");$("rep").showModal();};
 let sInst="";
-$("btnSettings").onclick=async()=>{const d=await api("/api/settings");const s=d.settings;api("/api/health").then((h)=>{$("sVer").textContent=h&&h.version?`현재 버전 v${h.version}${h.lite?" · 경량판":""}`:"";});$("sCli").value=s.cli_exe||"";$("sUpdUrl").value=s.update_url||"";$("sUpdChk").checked=!!s.update_check;$("sGap").value=s.gap_sec;$("sMargin").value=s.advance_margin;$("sStop").checked=!!s.stop_before_play;$("sAuto").checked=!!s.auto_sync;sInst=s.default_inst||"";
+$("btnSettings").onclick=async()=>{$("sUpdBox").hidden=true;const d=await api("/api/settings");const s=d.settings;api("/api/health").then((h)=>{$("sVer").textContent=h&&h.version?`현재 버전 v${h.version}${h.lite?" · 경량판":""}`:"";});$("sCli").value=s.cli_exe||"";$("sUpdUrl").value=s.update_url||"";$("sUpdChk").checked=!!s.update_check;$("sGap").value=s.gap_sec;$("sMargin").value=s.advance_margin;$("sStop").checked=!!s.stop_before_play;$("sAuto").checked=!!s.auto_sync;sInst=s.default_inst||"";
   ddMake($("sInstDd"),instItemsSet,()=>sInst,(v)=>{sInst=v;});$("sCliHint").textContent=cliHint(d.cli);$("set").showModal();$("sCli").focus();};
 const cliHint=(c)=>!c?"—":c.found?`감지된 경로: ${c.exe} · ${c.pipe==="connected"?"연결됨":"끊김 "+(c.reason||c.status_error||"")}${c.override_invalid?" · 설정한 경로가 없어 기본 경로를 씁니다":""}`:"실행파일을 찾지 못했습니다";
 $("sSave").onclick=async()=>{const r=await api("/api/settings",{settings:{update_url:$("sUpdUrl").value.trim(),update_check:$("sUpdChk").checked,cli_exe:$("sCli").value.trim(),gap_sec:Number($("sGap").value)||0,advance_margin:Number($("sMargin").value)||0,default_inst:sInst,stop_before_play:$("sStop").checked,auto_sync:$("sAuto").checked}});
   if(!r.ok){$("sCliHint").textContent="저장 실패: "+(r.message||r.error||"");return;}S.settings=r.settings;$("sCliHint").textContent=cliHint(r.cli);$("set").close();await refreshState();$("instDd")._refresh&&$("instDd")._refresh();renderMid();};
 /* ── 자동 업데이트 (경량판) ── */
 let updInfo=null;
-async function checkUpdate(quiet){const r=await api("/api/update/check");if(!r.ok){if(!quiet)toast(r.message||"업데이트 확인 실패");return r;}
-  if(r.available){updInfo=r;$("updText").textContent=`새 버전 ${r.latest} 이(가) 있습니다 (현재 ${r.current})${r.lite?"":" — 경량판에서만 자동 적용됩니다"}${r.notes?" · "+r.notes:""}`;$("updGo").hidden=!r.lite;$("updBar").hidden=false;}
-  else if(!quiet)toast(`최신 버전입니다 (${r.current})`);return r;}
+// 결과 표시 대상: 설정 창이 열려 있으면 그 안의 카드, 아니면 상단 바
+function updTarget(){const inDlg=$("set").open;const box=inDlg?$("sUpdBox"):null;if(box){box.hidden=false;}return box;}
+function updShow(box,cls,html,btn){ if(box){box.className="updbox "+cls;box.innerHTML=`<span class="dot ${cls==="ok"?"on":cls==="bad"?"off":""}"></span><span class="updtxt">${html}</span>${btn?'<button class="small pri" id="sUpdGo">지금 업데이트</button>':""}`;const g=$("sUpdGo");if(g)g.onclick=()=>applyUpdate(box);}
+  else{$("updText").innerHTML=html;$("updGo").hidden=!btn;$("updLater").hidden=false;$("updBar").hidden=false;} }
+function updText(box,t){const el=box?box.querySelector(".updtxt"):$("updText");if(el)el.textContent=t;}
+async function checkUpdate(quiet){const box=updTarget();if(box)updShow(box,"","확인 중…",false);
+  const r=await api("/api/update/check");
+  if(!r.ok){if(box)updShow(box,"bad",esc(r.message||"업데이트 확인 실패"),false);else if(!quiet)toast(r.message||"업데이트 확인 실패");return r;}
+  if(r.available){updInfo=r;const html=`<b>새 버전 v${esc(r.latest)}</b> · 현재 v${esc(r.current)}${r.notes?" · "+esc(r.notes):""}${r.lite?"":" · 경량판에서만 자동 적용됩니다"}`;
+    if(box)updShow(box,"new",html,!!r.lite);else updShow(null,"new",html,!!r.lite);}
+  else{if(box)updShow(box,"ok",`최신 버전입니다 · v${esc(r.current)}`,false);else if(!quiet)toast(`최신 버전입니다 (v${r.current})`);}
+  return r;}
 $("updLater").onclick=()=>{$("updBar").hidden=true;};
-$("updGo").onclick=async()=>{if(!updInfo)return;$("updGo").disabled=true;$("updText").textContent="다운로드·검증 중…";const r=await api("/api/update/apply",{url:updInfo.url,sha256:updInfo.sha256,latest:updInfo.latest});
-  if(r.ok&&r.port){$("updText").textContent=r.message+" 새 버전이 뜨면 자동으로 이동합니다…";$("updLater").hidden=true;const origin=`http://127.0.0.1:${r.port}`;
-    // 1) 새 포트가 응답하면 그 주소로 이동 (창은 그대로)  2) 확인이 막히면(옛 CSP 등) 4초 뒤 그냥 이동 시도  3) 그래도 안 되면 안내
+$("updGo").onclick=()=>applyUpdate(null);
+async function applyUpdate(box){if(!updInfo)return;const btn=box?$("sUpdGo"):$("updGo");if(btn)btn.disabled=true;updText(box,"다운로드·검증 중…");
+  const r=await api("/api/update/apply",{url:updInfo.url,sha256:updInfo.sha256,latest:updInfo.latest});
+  if(r.ok&&r.port){updText(box,r.message+" 새 버전이 뜨면 이 창이 그대로 이어집니다…");if(!box)$("updLater").hidden=true;const origin=`http://127.0.0.1:${r.port}`;
     let ok=false;for(let i=0;i<40;i++){await new Promise((res)=>setTimeout(res,500));try{await fetch(origin+"/api/health",{mode:"no-cors",cache:"no-store"});ok=true;break;}catch{}}
     if(ok){location.href=origin+"/";return;}
-    $("updText").textContent="업데이트가 완료되었습니다. 앱을 다시 실행해 주세요.";alert("업데이트가 완료되었습니다.\n새 창으로 자동 전환되지 않았으니 앱을 다시 실행해 주세요.");}
-  else if(r.ok){$("updText").textContent=r.message;$("updLater").hidden=true;}else{$("updGo").disabled=false;$("updText").textContent="업데이트 실패: "+(r.message||r.error||"");}};
+    updText(box,"업데이트가 완료되었습니다. 앱을 다시 실행해 주세요.");alert("업데이트가 완료되었습니다.\n새 창으로 자동 전환되지 않았으니 앱을 다시 실행해 주세요.");}
+  else if(r.ok){updText(box,r.message);}
+  else{if(btn)btn.disabled=false;updText(box,"업데이트 실패: "+(r.message||r.error||""));}}
 $("sUpdNow").onclick=async()=>{const r=await api("/api/settings",{settings:{update_url:$("sUpdUrl").value.trim()}});if(!r.ok){toast(r.message||r.error);return;}await checkUpdate(false);};
 $("sTest").onclick=async()=>{$("sCliHint").textContent="확인 중…";const d=await api("/api/cli_test",{cli_exe:$("sCli").value.trim()});$("sCliHint").textContent=d.ok?cliHint(d.cli):"확인 실패: "+(d.message||d.error||"");};
 
