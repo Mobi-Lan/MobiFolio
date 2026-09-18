@@ -284,8 +284,11 @@ def build(scores: list, artist_state: dict | None = None) -> list[dict]:
         if len(k) >= 2:
             idx.auto[k] = disp[k]
     items: list[dict] = []
+    seen_title: dict[str, int] = {}   # 동명 채번: 같은 제목이 여럿이면 목록 순서대로 1, 2, 3…
     for p in prelim:
         title = p["title"]
+        seen_title[title] = seen_title.get(title, 0) + 1
+        dup_no = seen_title[title] if exact.get(title, 1) > 1 else 0
         artist_id: str | None = None
         artist_name = ""
         rule = ""
@@ -317,7 +320,7 @@ def build(scores: list, artist_state: dict | None = None) -> list[dict]:
                     song = rest
         akey = artist_id or (("auto:" + norm(artist_name)) if artist_name else "")
         items.append({
-            "i": p["i"], "title": title, "cleaned": p["cleaned"], "removed": p["removed"], "tags": p["tags"], "variant": p["variant"],
+            "i": p["i"], "title": title, "key": item_key(title, dup_no), "dupNo": dup_no, "cleaned": p["cleaned"], "removed": p["removed"], "tags": p["tags"], "variant": p["variant"],
             "artist": artist_name, "artistKey": akey, "manual": rule == "manual",
             "song": song, "rule": rule or "none", "bucket": "artist" if artist_name else "other",
             "cliBroken": title != title.strip(),   # 제목 끝 공백: 게임 CLI 의 play_music_score 가 못 찾는다 (실측) — 게임에서 이름을 고쳐야 함
@@ -327,6 +330,27 @@ def build(scores: list, artist_state: dict | None = None) -> list[dict]:
             "raw": p["raw"],
         })
     return items
+
+
+def item_key(title: str, dup_no: int) -> str:
+    """앱 내부 식별자. 제목이 유일하면 제목 그대로, 동명이면 '제목#n' (n 은 보관함 순서). 재생은 언제나 title 로 보낸다."""
+    return f"{title}#{dup_no}" if dup_no else title
+
+
+def key_map(items: list[dict]) -> dict[str, str]:
+    """key → 원본 제목."""
+    return {it["key"]: it["title"] for it in items}
+
+
+def resolve_key(key: str, title: str, items: list[dict]) -> str:
+    """저장된 key 가 지금 보관함에 없으면(예전 형식 '제목', 또는 '제목#3' 인데 2장만 남음) 같은 제목의 첫 악보로 잇는다. 없으면 그대로."""
+    keys = {it["key"] for it in items}
+    if key in keys:
+        return key
+    for it in items:
+        if it["title"] == (title or key):
+            return it["key"]
+    return key
 
 
 def build_instruments(instruments: list) -> list[dict]:

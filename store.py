@@ -277,10 +277,12 @@ def get_recent() -> list:
     return [x for x in r if isinstance(x, dict) and isinstance(x.get("title"), str)] if isinstance(r, list) else []
 
 
-def push_recent(title: str, inst: str = "") -> None:
+def push_recent(title: str, inst: str = "", key: str = "") -> None:
+    """key = 앱 내부 식별자(동명 악보 채번). 예전 항목(key 없음)은 제목이 key 다."""
+    key = key or title
     with LOCK:
-        r = [x for x in get_recent() if x.get("title") != title]
-        r.insert(0, {"title": title, "inst": inst or "", "ts": time.time()})
+        r = [x for x in get_recent() if (x.get("key") or x.get("title")) != key]
+        r.insert(0, {"key": key, "title": title, "inst": inst or "", "ts": time.time()})
         save("recent.json", r[:100])
 
 
@@ -322,13 +324,13 @@ def set_log(items: list) -> None:
 
 # ── 재생목록·폴더 ──
 def _norm_item(x) -> dict | None:
-    """항목 = {"title": DisplayTitle, "inst": 악기명|""}. 예전 문자열 항목도 받아준다. 모양이 틀리면 None(버림)."""
+    """항목 = {"key": 내부 식별자, "title": DisplayTitle, "inst": 악기명|""}. key 가 없던 예전 항목·문자열 항목은 제목을 key 로 받아준다. 모양이 틀리면 None(버림)."""
     if isinstance(x, str):
         t = x.strip()
-        return {"title": t, "inst": ""} if t else None
+        return {"key": t, "title": t, "inst": ""} if t else None
     if isinstance(x, dict) and isinstance(x.get("title"), str) and x["title"].strip():
-        inst = x.get("inst")
-        return {"title": x["title"], "inst": inst.strip() if isinstance(inst, str) else ""}
+        inst = x.get("inst"); k = x.get("key")
+        return {"key": k if isinstance(k, str) and k.strip() else x["title"], "title": x["title"], "inst": inst.strip() if isinstance(inst, str) else ""}
     return None
 
 

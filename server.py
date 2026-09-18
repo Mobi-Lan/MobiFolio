@@ -72,7 +72,7 @@ PARENT = os.environ.get("MABI_PARENT_PID", "")
 LITE_FILE = os.path.join(BASE, "lite.json")   # 경량판이 떠 있는 포트 (두 번째 실행이 창만 다시 열 때 씀)
 UPDATE_DIR = os.path.join(BASE, "update")     # 받은 새 exe 와 교체 스크립트
 MAX_UPDATE_BYTES = 200 * 1024 * 1024
-VERSION = "0.1.9"
+VERSION = "0.2.1"
 _srv = None   # ThreadingHTTPServer (종료용)
 
 
@@ -257,13 +257,25 @@ def sync() -> dict:
 
 
 # ── 재생목록 ──
+def _lists() -> dict:
+    """store.get_lists() + 항목 key 보정 (예전 '제목' 키, 없어진 '제목#n' → 같은 제목의 첫 악보)."""
+    d = store.get_lists()
+    items = _build_items()
+    for pl in d["playlists"]:
+        for it in pl["items"]:
+            it["key"] = lib.resolve_key(it["key"], it["title"], items)
+    return d
+
+
 def lists_op(op: str, p: dict) -> dict:
     with store.LOCK:   # 읽고-고쳐-쓰기 전체를 잠가 동시 요청이 서로의 변경을 덮어쓰지 않게
         return _lists_op(op, p)
 
 
 def _lists_op(op: str, p: dict) -> dict:
-    d = store.get_lists()
+    d = _lists()
+    cur_items = _build_items()
+    key_title = lib.key_map(cur_items)   # key → 제목 (담을 때 제목을 같이 저장해 두면 보관함이 바뀌어도 이름은 남는다)
     pls, fds = d["playlists"], d["folders"]
     now = time.time()
     fids = {f["id"] for f in fds}
@@ -305,28 +317,30 @@ def _lists_op(op: str, p: dict) -> dict:
     elif op == "add":
         for pl in pls:
             if pl["id"] == p.get("id"):
-                have = {it["title"] for it in pl["items"]}
-                for t in _titles(p.get("titles")):
-                    if t not in have:
-                        pl["items"].append({"title": t, "inst": ""}); have.add(t)
+                have = {it["key"] for it in pl["items"]}
+                for k in _titles(p.get("keys") or p.get("titles")):   # keys = 내부 식별자 (예전 UI 의 titles 도 받는다)
+                    k = lib.resolve_key(k, key_title.get(k) or (k.rsplit("#", 1)[0] if "#" in k else k), cur_items)   # 제목만 온 동명 악보·없는 채번은 그 제목의 첫 장으로
+                    if k not in have:
+                        pl["items"].append({"key": k, "title": key_title.get(k, k.rsplit("#", 1)[0] if "#" in k else k), "inst": ""}); have.add(k)
                 pl["updated"] = now
     elif op == "remove":
-        rm = set(_titles(p.get("titles")))
+        rm = set(_titles(p.get("keys") or p.get("titles")))
         for pl in pls:
             if pl["id"] == p.get("id"):
-                pl["items"] = [it for it in pl["items"] if it["title"] not in rm]; pl["updated"] = now
-    elif op == "reorder":   # items = 제목 순서 배열
+                pl["items"] = [it for it in pl["items"] if it["key"] not in rm]; pl["updated"] = now
+    elif op == "reorder":   # items = key 순서 배열
         for pl in pls:
             if pl["id"] == p.get("id"):
-                by = {it["title"]: it for it in pl["items"]}
-                order = [by[t] for t in _titles(p.get("items")) if t in by]
-                seen = {it["title"] for it in order}
-                pl["items"] = order + [it for it in pl["items"] if it["title"] not in seen]; pl["updated"] = now
-    elif op == "set_inst":   # 곡별 악기. title 없으면 목록 전체
+                by = {it["key"]: it for it in pl["items"]}
+                order = [by[k] for k in _titles(p.get("items")) if k in by]
+                seen = {it["key"] for it in order}
+                pl["items"] = order + [it for it in pl["items"] if it["key"] not in seen]; pl["updated"] = now
+    elif op == "set_inst":   # 곡별 악기. key(예전 UI 는 title) 없으면 목록 전체
+        one = next((v for v in (p.get("key"), p.get("title")) if isinstance(v, str) and v.strip()), "")   # 원문 그대로 비교 (끝 공백 제목도 있다)
         for pl in pls:
             if pl["id"] == p.get("id"):
                 for it in pl["items"]:
-                    if not _s(p.get("title")) or it["title"] == p.get("title"):
+                    if not one or it["key"] == one or (not p.get("key") and it["title"] == one):
                         it["inst"] = _s(p.get("inst"))
                 pl["updated"] = now
     elif op == "memo":
@@ -584,7 +598,7 @@ def _mark_equipped(name: str) -> None:
         print(f"[play] 장착 표시 갱신 실패: {e}", flush=True)
 
 
-def play(title: str, instrument: str | None) -> dict:
+def play(title: str, instrument: str | None, key: str = "") -> dict:
     """(설정) 연주 중이면 먼저 정지 → (악기 지정 시) change_instrument → play_music_score."""
     out = {"ok": True, "steps": []}
     if not (title or "").strip():
@@ -638,7 +652,7 @@ def play(title: str, instrument: str | None) -> dict:
     out["ok"] = r.ok
     if r.ok:
         _last_play.update({"title": title, "inst": inst or ""})
-        store.push_recent(title, inst or "")
+        store.push_recent(title, inst or "", key or "")
     return out
 
 
@@ -686,14 +700,13 @@ class H(SimpleHTTPRequestHandler):
                                 "instruments": {"fetched_at": ins["fetched_at"], "count": len(ins["items"])}})
         if u.path == "/api/scores":
             items = [dict(it) for it in _build_items()]
-            dur = store.get_durations(); rec = {x["title"]: x["ts"] for x in store.get_recent()}
+            dur = store.get_durations(); rec = {(x.get("key") or x["title"]): x["ts"] for x in store.get_recent()}
             for it in items:
-                it["duration"] = dur.get(it["title"]); it["lastPlayed"] = rec.get(it["title"])
+                it["duration"] = dur.get(it["title"])
+                it["lastPlayed"] = rec.get(it["key"]) or (rec.get(it["title"]) if it["dupNo"] == 1 else None)   # 채번 전 기록('제목')은 첫 악보에
             found = lib.search(items, q.get("q", ""))
             if q.get("view") == "recent":
-                seen: set[str] = set()
-                found = [it for it in sorted([it for it in found if it["lastPlayed"]], key=lambda it: -it["lastPlayed"])
-                         if not (it["title"] in seen or seen.add(it["title"]))]
+                found = sorted([it for it in found if it["lastPlayed"]], key=lambda it: -it["lastPlayed"])
             if q.get("initial"):
                 found = [it for it in found if it["initial"] == q["initial"]]
             if q.get("artist"):                       # artistKey (수동 id 또는 'auto:…')
@@ -713,7 +726,7 @@ class H(SimpleHTTPRequestHandler):
         if u.path == "/api/instruments":
             return _json(self, {"items": lib.build_instruments(store.get_cache("instruments")["items"])})
         if u.path == "/api/playlists":
-            return _json(self, store.get_lists())
+            return _json(self, _lists())
         if u.path == "/api/activity":
             if not self._guard():   # CLI 를 실행시키는 GET 이라 출처 검사
                 return _json(self, {"ok": False, "error": "forbidden"}, 403)
@@ -857,13 +870,14 @@ class H(SimpleHTTPRequestHandler):
             t, inst = p.get("title"), p.get("instrument")
             t = t if isinstance(t, str) else _s(t)
             inst = inst if isinstance(inst, str) and inst.strip() else None
-            return _json(self, play(t, inst))
+            k = p.get("key")
+            return _json(self, play(t, inst, k if isinstance(k, str) else ""))
         if u.path == "/api/stop":
             return _json(self, stop())
         if u.path == "/api/playlists":
             r = lists_op(_s(p.get("op")), p)
             if not r.get("ok"):
-                r = {**store.get_lists(), **r}   # 실패해도 UI 가 목록 상태를 잃지 않게
+                r = {**_lists(), **r}   # 실패해도 UI 가 목록 상태를 잃지 않게
             return _json(self, r, 200 if r.get("ok") else 400)
         if u.path == "/api/artists":
             r = artists_op(_s(p.get("op")), p)

@@ -216,7 +216,7 @@ const fmtSec=(s)=>{s=Math.max(0,Math.floor(s||0));return `${Math.floor(s/60)}:${
 const fmtTs=(t)=>t?new Date(t*1000).toLocaleString("ko-KR",{month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"}):"—";
 const fmtClock=(t)=>{const d=new Date(t*1000);return [d.getHours(),d.getMinutes(),d.getSeconds()].map((n)=>String(n).padStart(2,"0")).join(":");};
 const ICON=(n,c="")=>`<svg class="i ${c}"><use href="#ic-${n}"/></svg>`;
-let S={all:[],byTitle:new Map(),summary:{artists:[],other:0,count:0,byInitial:{}},lists:{folders:[],playlists:[]},instruments:[],settings:{},
+let S={all:[],byKey:new Map(),byTitle:new Map(),summary:{artists:[],other:0,count:0,byInitial:{}},lists:{folders:[],playlists:[]},instruments:[],settings:{},
   view:{kind:"lib"},q:"",initial:"",filter:"",sort:"rel",artSort:"count",artQ:"",selected:new Set(),sel:null,
   queue:[],order:[],qi:-1,src:"",shuffle:false,repeat:"off",now:null,playing:false,pollT:null,startedAt:0,advancing:false,manualStop:false,gapT:null,
   instrument:"",rawOpen:false,logs:[]};
@@ -260,18 +260,19 @@ async function refreshState(){const s=await api("/api/state");
   $("fetched").textContent=`악보 ${s.scores.count} · 악기 ${s.instruments.count} · 수신 ${fmtTs(s.scores.fetched_at)}`;return s;}
 async function loadAll(){const [sc,ls,ar,ins,st]=await Promise.all([api("/api/scores"),api("/api/playlists"),api("/api/artists"),api("/api/instruments"),api("/api/settings")]);
   if(!sc||!sc.items||!ls||!ls.playlists||!ar||!ar.artists||!ins||!ins.items||!st||!st.settings){toast("서버에서 데이터를 받지 못했습니다 — 백엔드 상태를 확인하세요 ("+((sc&&sc.message)||(ls&&ls.message)||"")+")");return;}
-  S.all=sc.items;S.byTitle=new Map(sc.items.map((i)=>[i.title,i]));S.summary={...sc.summary,artists:ar.artists,other:ar.other};S.lists=ls;S.instruments=ins.items;S.settings=st.settings;
+  S.all=sc.items;S.byKey=new Map(sc.items.map((i)=>[i.key,i]));S.byTitle=new Map();for(const i of sc.items)if(!S.byTitle.has(i.title))S.byTitle.set(i.title,i);S.summary={...sc.summary,artists:ar.artists,other:ar.other};S.lists=ls;S.instruments=ins.items;S.settings=st.settings;
   if(S.instrument&&!S.instruments.some((i)=>i.name===S.instrument))S.instrument="";$("instDd")._refresh&&$("instDd")._refresh();render();}
+const libOf=(x)=>x?(S.byKey.get(x.key)||S.byTitle.get(x.title)||null):null;   // 큐·재생목록 항목 → 보관함 항목 (key 우선, 예전 항목은 제목으로)
 async function listsApi(body){const r=await api("/api/playlists",body);if(r&&r.playlists){S.lists=r;}if(!r||r.ok===false){toast("재생목록 저장 실패: "+(r&&(r.message||r.error)||"서버 응답 없음"));}return r;}
 async function loadLog(){const d=await api("/api/log");S.logs=d.items;renderLog();}
 
 /* ── 렌더: 레일 ── */
 function refreshQueue(){ // 재생 중인 재생목록(src="pl:<id>")이 편집되면 큐도 그 목록을 따라간다 (삭제된 곡은 안 틀고, 순서·악기 변경 반영)
   if(!S.src||!S.src.startsWith("pl:"))return;const pl=S.lists.playlists.find((x)=>"pl:"+x.id===S.src);if(!pl)return;
-  const cur=S.queue[S.qi];const q=pl.items.map((x)=>({title:x.title,inst:x.inst||""}));if(JSON.stringify(q)===JSON.stringify(S.queue))return;
-  const oldQueue=S.queue,oldQi=S.qi;S.queue=q;S.qi=cur?q.findIndex((x)=>x.title===cur.title):-1;
-  if(S.qi<0&&cur){const nxt=oldQueue.slice(oldQi+1).find((x)=>q.some((y)=>y.title===x.title));S.qi=nxt?q.findIndex((x)=>x.title===nxt.title)-1:q.length-1;}   // 빠진 곡의 '다음 곡' 직전 위치 (-1 = 첫 곡 앞)
-  if(S.shuffle&&oldQueue.length===q.length&&oldQueue.every((x,i)=>x.title===q[i].title)){return;}   // 악기만 바뀐 편집이면 셔플 순서 유지
+  const cur=S.queue[S.qi];const q=pl.items.map((x)=>({key:x.key,title:x.title,inst:x.inst||""}));if(JSON.stringify(q)===JSON.stringify(S.queue))return;
+  const oldQueue=S.queue,oldQi=S.qi;S.queue=q;S.qi=cur?q.findIndex((x)=>x.key===cur.key):-1;
+  if(S.qi<0&&cur){const nxt=oldQueue.slice(oldQi+1).find((x)=>q.some((y)=>y.key===x.key));S.qi=nxt?q.findIndex((x)=>x.key===nxt.key)-1:q.length-1;}   // 빠진 곡의 '다음 곡' 직전 위치 (-1 = 첫 곡 앞)
+  if(S.shuffle&&oldQueue.length===q.length&&oldQueue.every((x,i)=>x.key===q[i].key)){return;}   // 악기만 바뀐 편집이면 셔플 순서 유지
   makeOrder();}
 function render(){refreshQueue();renderTree();renderMid();renderSel();renderQueue();}
 function renderTree(){
@@ -306,7 +307,7 @@ function setView(v){S.view=v;S.selected.clear();S.initial="";S.filter="";renderT
 /* ── 렌더: 가운데 ── */
 function currentItems(){
   const v=S.view;let items=S.all;
-  if(v.kind==="pl"){const pl=S.lists.playlists.find((p)=>p.id===v.id);return pl?pl.items.map((it,k)=>({...(S.byTitle.get(it.title)||{title:it.title,song:it.title,cleaned:it.title,artist:"",tags:[],missing:true}),plInst:it.inst,plIndex:k})):[];}
+  if(v.kind==="pl"){const pl=S.lists.playlists.find((p)=>p.id===v.id);return pl?pl.items.map((it,k)=>({...(libOf(it)||{title:it.title,song:it.title,cleaned:it.title,artist:"",tags:[],missing:true}),key:it.key,plInst:it.inst,plIndex:k})):[];}
   if(v.kind==="recent")items=items.filter((i)=>i.lastPlayed);
   if(v.kind==="other")items=items.filter((i)=>i.bucket==="other");
   if(v.kind==="artist")items=items.filter((i)=>i.artistKey===v.key);
@@ -349,41 +350,41 @@ function renderMid(){
     (items.length?items.map((it,i)=>rowHtml(it,i)).join(""):`<div class="empty">${S.summary.count?"조건에 맞는 곡이 없습니다":"아직 수신한 악보가 없습니다 — 「갱신」을 누르세요"}</div>`);
   $("mid").scrollTop=st;
   bindRows(items);renderBulk(items);
-  $("ckAll").onchange=()=>{S.selected=new Set($("ckAll").checked?items.map((i)=>i.title):[]);renderMid();};
+  $("ckAll").onchange=()=>{S.selected=new Set($("ckAll").checked?items.map((i)=>i.key):[]);renderMid();};
 }
-const allChecked=(items)=>items.length>0&&items.every((i)=>S.selected.has(i.title));
+const allChecked=(items)=>items.length>0&&items.every((i)=>S.selected.has(i.key));
 function renderBulk(items){const b=$("bulkBox");if(!b)return;b.innerHTML=bulkHtml(items);bindBulk(items);}
 // 체크한 곡에 대한 일괄 작업 — 스크롤되지 않는 상단(midHead)에 고정
-function bulkHtml(items){const n=items.filter((i)=>S.selected.has(i.title)).length;if(!n)return "";const inPl=S.view.kind==="pl";
+function bulkHtml(items){const n=items.filter((i)=>S.selected.has(i.key)).length;if(!n)return "";const inPl=S.view.kind==="pl";
   return `<div class="bulk" style="margin:8px 12px 0"><input type="checkbox" id="selAll" checked><span>선택 <b>${n}</b>곡</span><span class="grow"></span>
     <button class="small pri" id="bPlay">${ICON("play","s")}선택 재생</button><button class="small" id="bAdd">${ICON("plus","s")}재생목록에 담기</button><button class="small ghost" id="bNew">새 목록으로</button>
     ${inPl?`<button class="small ghost" id="bRemove">이 목록에서 제거</button>`:`<button class="small ghost" id="bAssign">${ICON("user","s")}아티스트 지정</button><button class="small ghost" id="bUnassign">지정 해제</button>`}
     <button class="small ghost" id="bClear" title="선택 해제">${ICON("x","s")}</button></div>`;}
-function bindBulk(items){const sel=()=>items.filter((i)=>S.selected.has(i.title));
+function bindBulk(items){const sel=()=>items.filter((i)=>S.selected.has(i.key));
   if($("selAll"))$("selAll").onchange=()=>{S.selected.clear();renderMid();};if($("bClear"))$("bClear").onclick=()=>{S.selected.clear();renderMid();};
-  if($("bPlay"))$("bPlay").onclick=()=>{const list=sel().map((it)=>({title:it.title,inst:it.plInst||""}));if(list.length)playFrom(list,0,"view");};
-  const titles=()=>sel().map((it)=>it.title);
-  if($("bAdd"))$("bAdd").onclick=(e)=>addMenu(e,titles());if($("bNew"))$("bNew").onclick=()=>newList(null,titles());
+  if($("bPlay"))$("bPlay").onclick=()=>{const list=sel().map((it)=>({key:it.key,title:it.title,inst:it.plInst||""}));if(list.length)playFrom(list,0,"view");};
+  const keys=()=>sel().map((it)=>it.key),titles=()=>[...new Set(sel().map((it)=>it.title))];   // 재생목록은 key(악보 한 장씩), 아티스트 지정은 제목(동명 전체)
+  if($("bAdd"))$("bAdd").onclick=(e)=>addMenu(e,keys());if($("bNew"))$("bNew").onclick=()=>newList(null,keys());
   if($("bAssign"))$("bAssign").onclick=(e)=>assignMenu(e,titles());if($("bUnassign"))$("bUnassign").onclick=async()=>{await api("/api/artists",{op:"unassign",titles:titles()});S.selected.clear();await loadAll();};
-  if($("bRemove"))$("bRemove").onclick=async()=>{await listsApi({op:"remove",id:S.view.id,titles:titles()});S.selected.clear();render();};
+  if($("bRemove"))$("bRemove").onclick=async()=>{await listsApi({op:"remove",id:S.view.id,keys:keys()});S.selected.clear();render();};
 }
-function rowHtml(it,i){const playing=S.now&&S.now.title===it.title&&S.playing;
-  return `<div class="row ${S.sel===it.title?"sel":""}" data-t="${esc(it.title)}" title="더블클릭: 재생"><input type="checkbox" data-ck="${esc(it.title)}" aria-label="선택" ${S.selected.has(it.title)?"checked":""}><span class="no">${i+1}</span>
-    <div class="ttl"><b><span class="tt">${esc(it.song||it.cleaned)}</span>${playing?'<span class="badge play">재생 중</span>':""}${it.variant?`<span class="badge var">${esc(it.variant)}</span>`:""}${(it.tags||[]).map((t)=>`<span class="badge tag">${esc(t)}</span>`).join("")}${it.dupExact>1?`<span class="badge dup">동명 ${it.dupExact}</span>`:""}${it.cliBroken?'<span class="badge dup" title="제목 끝에 공백이 있어 게임 CLI 가 찾지 못합니다. 게임에서 이름의 끝 공백을 지우고 갱신하세요.">CLI 재생 불가</span>':""}</b><small>${esc(it.title)}</small></div>
+function rowHtml(it,i){const playing=S.now&&S.now.key===it.key&&S.playing;
+  return `<div class="row ${S.sel===it.key?"sel":""}" data-t="${esc(it.key)}" title="더블클릭: 재생"><input type="checkbox" data-ck="${esc(it.key)}" aria-label="선택" ${S.selected.has(it.key)?"checked":""}><span class="no">${i+1}</span>
+    <div class="ttl"><b><span class="tt">${esc(it.song||it.cleaned)}</span>${playing?'<span class="badge play">재생 중</span>':""}${it.variant?`<span class="badge var">${esc(it.variant)}</span>`:""}${(it.tags||[]).map((t)=>`<span class="badge tag">${esc(t)}</span>`).join("")}${it.dupExact>1?`<span class="badge dup">동명 ${it.dupExact}</span>`:""}${it.cliBroken?'<span class="badge dup" title="제목 끝에 공백이 있어 게임 CLI 가 찾지 못합니다. 게임에서 이름의 끝 공백을 지우고 갱신하세요.">CLI 재생 불가</span>':""}</b><small>${esc(it.title)}${it.dupNo?` <span style="color:var(--faint)">#${it.dupNo}</span>`:""}</small></div>
     <span class="art">${esc(it.artist||"")}${it.manual?'<span class="badge man">수동</span>':""}</span><span class="len">${it.duration?fmtSec(it.duration):""}</span>
-    <span class="acts"><button class="ic pri" data-play="${esc(it.title)}" title="재생">${ICON("play","s")}</button><button class="ic" data-add="${esc(it.title)}" title="재생목록에 담기">${ICON("plus","s")}</button><button class="ic dim" data-more="${esc(it.title)}" title="더 보기">${ICON("more","s")}</button></span></div>`;}
+    <span class="acts"><button class="ic pri" data-play="${esc(it.key)}" title="재생">${ICON("play","s")}</button><button class="ic" data-add="${esc(it.key)}" title="재생목록에 담기">${ICON("plus","s")}</button><button class="ic dim" data-more="${esc(it.key)}" title="더 보기">${ICON("more","s")}</button></span></div>`;}
 function bindRows(items){const M=$("mid");
   M.querySelectorAll(".row[data-t]").forEach((r)=>r.onclick=(e)=>{if(e.target.closest("button,input"))return;S.sel=r.dataset.t;renderSel();M.querySelectorAll(".row.sel").forEach((x)=>x.classList.remove("sel"));r.classList.add("sel");});
-  const playTitle=(t)=>{if(S.switching)return;const list=items.map((it)=>({title:it.title,inst:it.plInst||""}));playFrom(list,list.findIndex((x)=>x.title===t),S.view.kind==="pl"?"pl:"+S.view.id:"view");};
-  M.querySelectorAll("[data-play]").forEach((b)=>b.onclick=()=>playTitle(b.dataset.play));
-  M.querySelectorAll(".row[data-t]").forEach((r)=>r.ondblclick=(e)=>{if(e.target.closest("button,input,.dd"))return;e.preventDefault();window.getSelection()?.removeAllRanges();playTitle(r.dataset.t);});
+  const playKey=(k)=>{if(S.switching)return;const list=items.map((it)=>({key:it.key,title:it.title,inst:it.plInst||""}));playFrom(list,list.findIndex((x)=>x.key===k),S.view.kind==="pl"?"pl:"+S.view.id:"view");};
+  M.querySelectorAll("[data-play]").forEach((b)=>b.onclick=()=>playKey(b.dataset.play));
+  M.querySelectorAll(".row[data-t]").forEach((r)=>r.ondblclick=(e)=>{if(e.target.closest("button,input,.dd"))return;e.preventDefault();window.getSelection()?.removeAllRanges();playKey(r.dataset.t);});
   M.querySelectorAll("[data-add]").forEach((b)=>b.onclick=(e)=>addMenu(e,[b.dataset.add]));
   M.querySelectorAll("[data-more]").forEach((b)=>b.onclick=(e)=>rowMenu(e,b.dataset.more));
   M.querySelectorAll("[data-ck]").forEach((c)=>c.onchange=()=>{c.checked?S.selected.add(c.dataset.ck):S.selected.delete(c.dataset.ck);renderMid();});
 }
-function rowMenu(e,title){const it=S.byTitle.get(title);const items=[[it?(it.song||it.cleaned):title,null],["▶ 재생",()=>playFrom([{title,inst:""}],0,"single")],["재생목록에 담기…",()=>addMenu(e,[title])],["아티스트 지정…",()=>assignMenu(e,[title])]];
+function rowMenu(e,key){const it=S.byKey.get(key)||(S._items||[]).find((x)=>x.key===key);const title=it?it.title:key;const items=[[it?(it.song||it.cleaned):title,null],["▶ 재생",()=>playFrom([{key,title,inst:""}],0,"single")],["재생목록에 담기…",()=>addMenu(e,[key])],["아티스트 지정…",()=>assignMenu(e,[title])]];
   if(it&&it.artist&&it.song)items.push([`뒤집기: 「${it.song}」 → 아티스트로`,async()=>{await api("/api/artists",{op:"assign",titles:[title],name:it.song});await loadAll();}]);
-  if(S.view.kind==="pl")items.push(["이 목록에서 제거",async()=>{await listsApi({op:"remove",id:S.view.id,titles:[title]});render();}]);
+  if(S.view.kind==="pl")items.push(["이 목록에서 제거",async()=>{await listsApi({op:"remove",id:S.view.id,keys:[key]});render();}]);
   menu(e,items);}
 
 /* ── 재생목록 뷰 ── */
@@ -401,21 +402,21 @@ function renderPlHead(pl,items){
   $("plName").onclick=()=>renamePl(pl.id);$("plMemo").onclick=async()=>{const m=await ask("메모",pl.memo||"");if(m===null)return;await listsApi({op:"memo",id:pl.id,memo:m});render();};
   $("btnPlayAll").onclick=()=>playFrom(pl.items.map((it)=>({...it})),0,"pl:"+pl.id);$("plShuffle").onclick=()=>toggleShuffle();$("plRepeat").onclick=()=>cycleRepeat();$("plMore").onclick=(e)=>plMenu(e,pl.id);
   $("midHead").querySelectorAll("[data-pi]").forEach((n)=>n.onclick=async()=>{await listsApi({op:"set_inst",id:pl.id,inst:n.dataset.pi});render();});
-  const sortPl=async(key,label)=>{if(!confirm(`이 목록의 순서를 ${label}으로 바꿔 저장할까요? (되돌릴 수 없습니다)`))return;const sorted=[...items].sort((a,b)=>(a[key]||"힣").localeCompare(b[key]||"힣","ko"));await listsApi({op:"reorder",id:pl.id,items:sorted.map((i)=>i.title)});render();};
+  const sortPl=async(key,label)=>{if(!confirm(`이 목록의 순서를 ${label}으로 바꿔 저장할까요? (되돌릴 수 없습니다)`))return;const sorted=[...items].sort((a,b)=>(a[key]||"힣").localeCompare(b[key]||"힣","ko"));await listsApi({op:"reorder",id:pl.id,items:sorted.map((i)=>i.key)});render();};
   $("plSortT").onclick=()=>sortPl("song","제목순");$("plSortA").onclick=()=>sortPl("artist","아티스트순");
   $("plExport").onclick=async()=>{const txt=JSON.stringify({name:pl.name,memo:pl.memo,items:pl.items},null,1);try{await navigator.clipboard.writeText(txt);alert("클립보드에 JSON으로 복사했습니다");}catch{prompt("복사:",txt);}};
 }
 function renderPlRows(pl,items){
   $("mid").innerHTML=`<div class="row pl hd"><span></span><input type="checkbox" id="ckAll" ${allChecked(items)?"checked":""}><span>#</span><span>제목 · 파일명</span><span class="art">아티스트</span><span>악기</span><span style="text-align:right">길이</span><span></span></div>`+
-    (items.length?items.map((it,i)=>{const playing=S.now&&S.now.title===it.title&&S.playing;return `<div class="row pl ${S.sel===it.title?"sel":""}" draggable="true" data-t="${esc(it.title)}" data-i="${i}" title="더블클릭: 재생 · 핸들을 끌어 순서 변경"><span class="grip">${ICON("grip","s")}</span><input type="checkbox" data-ck="${esc(it.title)}" aria-label="선택" ${S.selected.has(it.title)?"checked":""}><span class="no" style="${playing?"color:var(--gold)":""}">${playing?"▶":i+1}</span>
-      <div class="ttl"><b><span class="tt">${esc(it.song||it.cleaned)}</span>${playing?'<span class="badge play">재생 중</span>':""}${it.missing?'<span class="badge dup">악보 없음</span>':""}${it.dupExact>1?`<span class="badge dup">동명 ${it.dupExact}</span>`:""}${it.cliBroken?'<span class="badge dup" title="제목 끝에 공백이 있어 게임 CLI 가 찾지 못합니다. 게임에서 이름의 끝 공백을 지우고 갱신하세요.">CLI 재생 불가</span>':""}</b><small>${esc(it.missing?"—":it.title)}</small></div>
-      <span class="art">${esc(it.artist||"")}</span><div class="dd" data-inst-of="${esc(it.title)}"></div><span class="len">${it.duration?fmtSec(it.duration):""}</span>
-      <span class="acts"><button class="ic pri" data-play="${esc(it.title)}" title="재생">${ICON("play","s")}</button><button class="ic dim" data-more="${esc(it.title)}" title="더 보기">${ICON("more","s")}</button><button class="ic dim" data-rm="${esc(it.title)}" title="목록에서 제거">${ICON("x","s")}</button></span></div>`;}).join(""):`<div class="empty">비어 있음 — 전체 악보에서 + 로 담으세요</div>`)+
+    (items.length?items.map((it,i)=>{const playing=S.now&&S.now.key===it.key&&S.playing;return `<div class="row pl ${S.sel===it.key?"sel":""}" draggable="true" data-t="${esc(it.key)}" data-i="${i}" title="더블클릭: 재생 · 핸들을 끌어 순서 변경"><span class="grip">${ICON("grip","s")}</span><input type="checkbox" data-ck="${esc(it.key)}" aria-label="선택" ${S.selected.has(it.key)?"checked":""}><span class="no" style="${playing?"color:var(--gold)":""}">${playing?"▶":i+1}</span>
+      <div class="ttl"><b><span class="tt">${esc(it.song||it.cleaned)}</span>${playing?'<span class="badge play">재생 중</span>':""}${it.missing?'<span class="badge dup">악보 없음</span>':""}${it.dupExact>1?`<span class="badge dup">동명 ${it.dupExact}</span>`:""}${it.cliBroken?'<span class="badge dup" title="제목 끝에 공백이 있어 게임 CLI 가 찾지 못합니다. 게임에서 이름의 끝 공백을 지우고 갱신하세요.">CLI 재생 불가</span>':""}</b><small>${esc(it.missing?"—":it.title)}${it.dupNo?` <span style="color:var(--faint)">#${it.dupNo}</span>`:""}</small></div>
+      <span class="art">${esc(it.artist||"")}</span><div class="dd" data-inst-of="${esc(it.key)}"></div><span class="len">${it.duration?fmtSec(it.duration):""}</span>
+      <span class="acts"><button class="ic pri" data-play="${esc(it.key)}" title="재생">${ICON("play","s")}</button><button class="ic dim" data-more="${esc(it.key)}" title="더 보기">${ICON("more","s")}</button><button class="ic dim" data-rm="${esc(it.key)}" title="목록에서 제거">${ICON("x","s")}</button></span></div>`;}).join(""):`<div class="empty">비어 있음 — 전체 악보에서 + 로 담으세요</div>`)+
     `<div class="note" style="padding:8px 10px">핸들을 끌어 순서 변경 · 악기는 곡마다 다르게 지정할 수 있습니다.</div>`;
   bindRows(items);renderBulk(items);
-  $("mid").querySelectorAll("[data-rm]").forEach((b)=>b.onclick=async()=>{await listsApi({op:"remove",id:pl.id,titles:[b.dataset.rm]});render();});
-  $("mid").querySelectorAll("[data-inst-of]").forEach((el)=>{const t=el.dataset.instOf;ddMake(el,()=>[{v:"",label:"그대로"}].concat(S.instruments.map((i,k)=>({v:i.name,label:instLabel(i),eq:i.equipped,sep:k===0}))),()=>{const P=S.lists.playlists.find((x)=>x.id===pl.id)||pl;return (P.items.find((x)=>x.title===t)||{}).inst||"";},async(v)=>{await listsApi({op:"set_inst",id:pl.id,title:t,inst:v});refreshQueue();renderQueue();});el.querySelector(".dd-btn").style.padding="4px 8px";el.querySelector(".dd-btn").style.fontSize="12px";});
-  $("ckAll").onchange=()=>{S.selected=new Set($("ckAll").checked?items.map((i)=>i.title):[]);renderMid();};
+  $("mid").querySelectorAll("[data-rm]").forEach((b)=>b.onclick=async()=>{await listsApi({op:"remove",id:pl.id,keys:[b.dataset.rm]});render();});
+  $("mid").querySelectorAll("[data-inst-of]").forEach((el)=>{const t=el.dataset.instOf;ddMake(el,()=>[{v:"",label:"그대로"}].concat(S.instruments.map((i,k)=>({v:i.name,label:instLabel(i),eq:i.equipped,sep:k===0}))),()=>{const P=S.lists.playlists.find((x)=>x.id===pl.id)||pl;return (P.items.find((x)=>x.key===t)||{}).inst||"";},async(v)=>{await listsApi({op:"set_inst",id:pl.id,key:t,inst:v});refreshQueue();renderQueue();});el.querySelector(".dd-btn").style.padding="4px 8px";el.querySelector(".dd-btn").style.fontSize="12px";});
+  $("ckAll").onchange=()=>{S.selected=new Set($("ckAll").checked?items.map((i)=>i.key):[]);renderMid();};
   // 드래그 순서 변경
   let drag=null;$("mid").querySelectorAll(".row.pl[draggable]").forEach((r)=>{r.ondragstart=(e)=>{drag=r;r.classList.add("dragging");e.dataTransfer.effectAllowed="move";};r.ondragend=()=>{r.classList.remove("dragging");$("mid").querySelectorAll(".over").forEach((x)=>x.classList.remove("over","after"));};
     r.ondragover=(e)=>{e.preventDefault();if(drag&&drag!==r){$("mid").querySelectorAll(".over").forEach((x)=>x.classList.remove("over","after"));r.classList.add("over");if(Number(drag.dataset.i)<Number(r.dataset.i))r.classList.add("after");}};
@@ -424,28 +425,28 @@ function renderPlRows(pl,items){
 function plMenu(e,id){const pl=S.lists.playlists.find((p)=>p.id===id);menu(e,[[pl.name,null],["▶ 전체 재생",()=>playFrom(pl.items.map((it)=>({...it})),0,"pl:"+id)],["이름 변경",()=>renamePl(id)],["폴더로 이동",()=>movePl(id)],["메모",async()=>{const m=await ask("메모",pl.memo||"");if(m===null)return;await listsApi({op:"memo",id,memo:m});render();}],["삭제",()=>delPl(id)]]);}
 
 /* ── 선택 카드 ── */
-function renderSel(){const it=S.sel?S.byTitle.get(S.sel):null;const pos=it&&S._items?S._items.findIndex((x)=>x.title===it.title):-1;$("selMeta").textContent=pos>=0?`${pos+1} / ${S._items.length}`:"";
+function renderSel(){const it=S.sel?S.byKey.get(S.sel):null;const pos=it&&S._items?S._items.findIndex((x)=>x.key===it.key):-1;$("selMeta").textContent=pos>=0?`${pos+1} / ${S._items.length}`:"";
   if(!it){$("selBody").innerHTML=`<div class="empty">목록에서 곡을 누르세요</div>`;return;}
   const dups=S.all.filter((x)=>x.title===it.title).length,similar=S.all.filter((x)=>x.title!==it.title&&x.dupSimilar>1&&x.song===it.song);
   const rule={manual:"수동 지정",dict:"등록된 이름 일치",split:"구분자로 분리",auto:"자동 추출 이름 일치",none:"분류 안 됨 (기타)"}[it.rule]||it.rule;
   $("selBody").innerHTML=`<div style="display:flex;flex-direction:column;gap:10px">
-    <div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:17px;font-weight:700;color:var(--strong);line-height:1.25">${esc(it.song||it.cleaned)}</span><span style="font-size:13px;color:var(--ink2);display:flex;align-items:center;flex-wrap:wrap">${esc(it.artist||"아티스트 미지정")}${it.manual?'<span class="badge man">수동</span>':""}${it.dupExact>1?`<span class="badge dup">동명 ${it.dupExact}</span>`:""}${it.cliBroken?'<span class="badge dup" title="제목 끝에 공백이 있어 게임 CLI 가 찾지 못합니다. 게임에서 이름의 끝 공백을 지우고 갱신하세요.">CLI 재생 불가</span>':""}</span><span class="num" style="font-size:11.5px;color:var(--muted);word-break:break-all">${esc(it.title)}</span></div>
+    <div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:17px;font-weight:700;color:var(--strong);line-height:1.25">${esc(it.song||it.cleaned)}</span><span style="font-size:13px;color:var(--ink2);display:flex;align-items:center;flex-wrap:wrap">${esc(it.artist||"아티스트 미지정")}${it.manual?'<span class="badge man">수동</span>':""}${it.dupExact>1?`<span class="badge dup">동명 ${it.dupExact}</span>`:""}${it.cliBroken?'<span class="badge dup" title="제목 끝에 공백이 있어 게임 CLI 가 찾지 못합니다. 게임에서 이름의 끝 공백을 지우고 갱신하세요.">CLI 재생 불가</span>':""}</span><span class="num" style="font-size:11.5px;color:var(--muted);word-break:break-all">${esc(it.title)}${it.dupNo?` <span style="color:var(--faint)">#${it.dupNo}</span>`:""}</span></div>
     <div class="kv" style="padding:9px 11px;background:var(--panel);border:1px solid var(--line);border-radius:9px"><span class="k">정리 제목</span><span class="v">${esc(it.cleaned)}</span><span class="k">규칙</span><span class="v">${esc(rule)}</span>${(it.tags||[]).length||it.variant?`<span class="k">태그</span><span class="v">${(it.tags||[]).map((t)=>`<span class="badge tag" style="margin-left:0;margin-right:4px">${esc(t)}</span>`).join("")}${it.variant?`<span class="badge var" style="margin-left:0">${esc(it.variant)}</span>`:""}</span>`:""}<span class="k">길이</span><span class="v">${it.duration?fmtSec(it.duration):'<span style="color:var(--faint)">재생하면 표시됩니다</span>'}</span>${it.lastPlayed?`<span class="k">최근 재생</span><span class="v">${fmtTs(it.lastPlayed)}</span>`:""}</div>
-    ${dups>1?`<div class="note" style="padding:8px 10px;border-radius:9px;border:1px solid rgba(232,138,166,.3);background:rgba(232,138,166,.06)"><span style="color:var(--pink);font-weight:600">같은 제목 악보 ${dups}개</span> — 재생 시 CLI가 임의로 하나를 고릅니다. 게임 안에서 파일명을 바꿔 구분하세요.</div>`:""}
+    ${dups>1?`<div class="note" style="padding:8px 10px;border-radius:9px;border:1px solid rgba(232,138,166,.3);background:rgba(232,138,166,.06)"><span style="color:var(--pink);font-weight:600">같은 제목 악보 ${dups}개 중 ${it.dupNo}번째</span> — 앱 안에서는 따로 관리되지만, 재생 시에는 게임 CLI가 같은 제목 중 하나를 고릅니다.</div>`:""}
     ${similar.length?`<div class="note">비슷한 제목: ${similar.map((x)=>`<span class="num">${esc(x.title)}</span>`).join(", ")}</div>`:""}
     <div style="display:flex;gap:6px"><button class="pri" style="flex:1;justify-content:center" id="selPlay">${ICON("play","s")}재생</button><button style="flex:1;justify-content:center" id="selAdd">${ICON("plus","s")}목록에</button><button style="flex:1;justify-content:center" id="selArt">${ICON("user","s")}아티스트</button></div></div>`;
-  $("selPlay").onclick=()=>playFrom([{title:it.title,inst:""}],0,"single");$("selAdd").onclick=(e)=>addMenu(e,[it.title]);$("selArt").onclick=(e)=>assignMenu(e,[it.title]);
+  $("selPlay").onclick=()=>playFrom([{key:it.key,title:it.title,inst:""}],0,"single");$("selAdd").onclick=(e)=>addMenu(e,[it.key]);$("selArt").onclick=(e)=>assignMenu(e,[it.title]);
 }
 
 /* ── 큐·재생 ── */
 function qOrder(){return S.order.length?S.order:S.queue.map((_,i)=>i);}
 function qPos(){return qOrder().indexOf(S.qi);}
 function makeOrder(){const idx=S.queue.map((_,i)=>i);if(!S.shuffle){S.order=idx;return;}const cur=S.qi;const rest=idx.filter((i)=>i!==cur);for(let i=rest.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[rest[i],rest[j]]=[rest[j],rest[i]];}S.order=cur>=0?[cur,...rest]:rest;}
-async function playFrom(list,index,src){if(S.switching||!list.length||index<0)return;S.queue=list.map((x)=>({title:x.title,inst:x.inst||""}));S.qi=index;S.src=src;makeOrder();await playIndex(index);}
+async function playFrom(list,index,src){if(S.switching||!list.length||index<0)return;S.queue=list.map((x)=>({key:x.key||x.title,title:x.title,inst:x.inst||""}));S.qi=index;S.src=src;makeOrder();await playIndex(index);}
 async function playIndex(i){if(S.switching)return;clearTimeout(S.gapT);S.gapT=null;const it=S.queue[i];if(!it)return;S.switching=true;S.gen=(S.gen||0)+1;S.qi=i;S.manualStop=false;try{
-  const lib=S.byTitle.get(it.title);S.now={title:it.title,inst:it.inst||S.instrument||"",song:lib?(lib.song||lib.cleaned):it.title,artist:lib?lib.artist:""};
+  const lib=libOf(it);S.now={key:it.key,title:it.title,inst:it.inst||S.instrument||"",song:lib?(lib.song||lib.cleaned):it.title,artist:lib?lib.artist:""};
   $("nowTitle").textContent=S.now.song;$("nowSub").textContent="전송 중…";$("prog").style.width="0%";$("tEl").textContent="0:00";$("tTot").textContent=(lib&&lib.duration)?fmtSec(lib.duration):"0:00";
-  const r=await api("/api/play",{title:it.title,instrument:it.inst||S.instrument||null});
+  const r=await api("/api/play",{title:it.title,key:it.key,instrument:it.inst||S.instrument||null});
   S.playing=r.ok;S.startedAt=Date.now();S.lastRemain=null;
   if(!r.ok){const err=r.error||r.steps?.at(-1)?.error||"",msg=r.message||r.steps?.at(-1)?.message||"";
     $("nowSub").textContent="실패: "+errText(err,msg);loadLog();clearInterval(S.pollT);S.pollT=null;setMain(false);
@@ -495,19 +496,19 @@ async function pollAct(){
 $("btnMain").onclick=async()=>{if(S.switching)return;
   if(S.playing||S.gapT){S.manualStop=true;clearTimeout(S.gapT);S.gapT=null;S.gen=(S.gen||0)+1;const r=S.playing?await api("/api/stop",{}):{ok:true};loadLog();
     if(r.ok){await stopAll("정지됨");}else{S.manualStop=false;$("nowSub").textContent="정지 실패 — 잠시 후 다시: "+(r.message||r.error||"");}}
-  else if(S.qi>=0&&S.queue[S.qi]){await playIndex(S.qi);}else if(S.sel){playFrom([{title:S.sel,inst:""}],0,"single");}};
+  else if(S.qi>=0&&S.queue[S.qi]){await playIndex(S.qi);}else if(S.sel&&S.byKey.get(S.sel)){playFrom([{key:S.sel,title:S.byKey.get(S.sel).title,inst:""}],0,"single");}};
 $("btnNext").onclick=()=>{if(!S.queue.length||S.switching||S.advancing)return;clearTimeout(S.gapT);S.gapT=null;advance(1);};
 $("btnPrev").onclick=async()=>{if(!S.queue.length||S.switching||S.advancing)return;clearTimeout(S.gapT);S.gapT=null;const el=(Date.now()-S.startedAt)/1000;if(S.playing&&el>4){await playIndex(S.qi);}else advance(-1);};
 function toggleShuffle(){S.shuffle=!S.shuffle;makeOrder();$("btnShuffle").classList.toggle("on",S.shuffle);renderQueue();if(S.view.kind==="pl")renderMid();}
 function cycleRepeat(){S.repeat=S.repeat==="off"?"all":S.repeat==="all"?"one":"off";$("btnRepeat").classList.toggle("on",S.repeat!=="off");$("rep1").hidden=S.repeat!=="one";$("btnRepeat").title="반복: "+{off:"끔",all:"전체",one:"한 곡"}[S.repeat];renderQueue();if(S.view.kind==="pl")renderMid();}
 $("btnShuffle").onclick=toggleShuffle;$("btnRepeat").onclick=cycleRepeat;
 $("btnQueue").onclick=()=>{S.queueHidden=!S.queueHidden;renderQueue();};$("btnClearQueue").onclick=()=>{S.queue=[];S.order=[];S.qi=-1;renderQueue();};
-function renderQueue(){const ord=qOrder(),pos=qPos();const up=ord.slice(pos+1).map((i)=>S.queue[i]);const remain=up.reduce((a,it)=>a+((S.byTitle.get(it.title)||{}).duration||0),0);
+function renderQueue(){const ord=qOrder(),pos=qPos();const up=ord.slice(pos+1).map((i)=>S.queue[i]);const remain=up.reduce((a,it)=>a+((libOf(it)||{}).duration||0),0);
   $("queueN").textContent=up.length;$("queueMeta").textContent=S.queue.length?`${S.src.startsWith("pl:")?((S.lists.playlists.find((p)=>"pl:"+p.id===S.src)||{}).name||""):S.src==="view"?"현재 목록":"단일 재생"}${up.length?` · 남은 ${up.length}곡${remain?" · "+fmtSec(remain):""}`:""}${S.repeat!=="off"?" · 반복 "+{all:"전체",one:"한 곡"}[S.repeat]:""}${S.shuffle?" · 셔플":""}`:"";
   $("queueCard").hidden=!S.queue.length||!!S.queueHidden;layoutRight();
-  const now=S.queue[S.qi];const lib=(t)=>S.byTitle.get(t)||{};
-  $("queueBody").innerHTML=(now?`<div style="padding:9px 11px;border-radius:9px;border:1px solid var(--goldline);background:var(--goldwash);margin-bottom:6px"><div style="font-size:11px;color:var(--gold);letter-spacing:.08em">${S.playing?"재생 중":"현재"}</div><div style="font-weight:700;color:var(--strong)">${esc(lib(now.title).song||now.title)}</div><div style="font-size:11.5px;color:var(--ink2)">${esc(lib(now.title).artist||"")}${now.inst?" · "+esc(now.inst):" · 악기 그대로"}</div></div>`:"")+
-    (up.length?up.slice(0,30).map((it,k)=>`<div style="display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:center;padding:6px 9px;border-radius:8px;border:1px solid var(--line2);margin-bottom:4px;cursor:pointer" data-qj="${ord[pos+1+k]}"><span class="num" style="font-size:11px;color:var(--faint);width:16px">${k+1}</span><div style="min-width:0"><div style="font-size:12.5px;color:var(--ink);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(lib(it.title).song||it.title)}</div><div style="font-size:11px;color:var(--muted)">${esc(lib(it.title).artist||"")}${it.inst?" · "+esc(it.inst):""}</div></div><span class="num" style="font-size:11px;color:var(--muted)">${lib(it.title).duration?fmtSec(lib(it.title).duration):""}</span></div>`).join("")+(up.length>30?`<div class="note" style="text-align:center">+ ${up.length-30}곡</div>`:""):`<div class="note" style="padding:4px 2px">다음 곡 없음</div>`);
+  const now=S.queue[S.qi];const lib=(x)=>libOf(x)||{};
+  $("queueBody").innerHTML=(now?`<div style="padding:9px 11px;border-radius:9px;border:1px solid var(--goldline);background:var(--goldwash);margin-bottom:6px"><div style="font-size:11px;color:var(--gold);letter-spacing:.08em">${S.playing?"재생 중":"현재"}</div><div style="font-weight:700;color:var(--strong)">${esc(lib(now).song||now.title)}</div><div style="font-size:11.5px;color:var(--ink2)">${esc(lib(now).artist||"")}${now.inst?" · "+esc(now.inst):" · 악기 그대로"}</div></div>`:"")+
+    (up.length?up.slice(0,30).map((it,k)=>`<div style="display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:center;padding:6px 9px;border-radius:8px;border:1px solid var(--line2);margin-bottom:4px;cursor:pointer" data-qj="${ord[pos+1+k]}"><span class="num" style="font-size:11px;color:var(--faint);width:16px">${k+1}</span><div style="min-width:0"><div style="font-size:12.5px;color:var(--ink);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(lib(it).song||it.title)}</div><div style="font-size:11px;color:var(--muted)">${esc(lib(it).artist||"")}${it.inst?" · "+esc(it.inst):""}</div></div><span class="num" style="font-size:11px;color:var(--muted)">${lib(it).duration?fmtSec(lib(it).duration):""}</span></div>`).join("")+(up.length>30?`<div class="note" style="text-align:center">+ ${up.length-30}곡</div>`:""):`<div class="note" style="padding:4px 2px">다음 곡 없음</div>`);
   $("queueBody").querySelectorAll("[data-qj]").forEach((n)=>n.onclick=()=>{if(S.switching)return;clearTimeout(S.gapT);S.gapT=null;playIndex(Number(n.dataset.qj));});}
 
 /* ── CLI 로그 ── */
@@ -530,8 +531,8 @@ function artistMenu(e,key){const a=(S.summary.artists||[]).find((x)=>x.key===key
     ["별칭 추가",async()=>{if(!a.manual){alert("먼저 정식 아티스트로 등록하세요");return;}const al=await ask(`「${a.name}」의 별칭 (예: IU, 방탄소년단)`);if(!al)return;await api("/api/artists",{op:"alias",id:key,alias:al});await loadAll();}],
     ["다른 아티스트에 합치기",()=>{const targets=(S.summary.artists||[]).filter((x)=>x.manual&&x.key!==key);if(!targets.length){alert("합칠 정식 아티스트가 없습니다 (먼저 하나를 등록하세요)");return;}menu(e,[[`「${a.name}」 → 다음 아티스트로`,null]].concat(targets.map((t)=>[`★ ${t.name}`,async()=>{if(a.manual)await api("/api/artists",{op:"merge",from:key,into:t.key});else{await api("/api/artists",{op:"assign",titles:await titlesOf(),id:t.key});await api("/api/artists",{op:"alias",id:t.key,alias:a.name});}if(S.view.kind==="artist")S.view={kind:"artist",key:t.key};await loadAll();}])));}],
     ...(a.manual?[["삭제(지정 해제)",async()=>{if(!confirm(`「${a.name}」 등록을 지우고 지정을 해제할까요?`))return;await api("/api/artists",{op:"delete",id:key});if(S.view.kind==="artist")S.view={kind:"lib"};await loadAll();}]]:[])]);}
-function addMenu(e,titles){const pls=S.lists.playlists;menu(e,[[`${titles.length}곡 담기`,null]].concat(pls.map((p)=>[`♪ ${p.name} (${p.items.length})`,async()=>{await listsApi({op:"add",id:p.id,titles});S.selected.clear();render();}])).concat([["+ 새 재생목록에",()=>newList(null,titles)]]));}
-async function newList(folder=null,titles=[]){const name=await ask("재생목록 이름","새 재생목록");if(name===null)return;await listsApi({op:"create",name,folder});const pl=S.lists.playlists.at(-1);if(titles.length)await listsApi({op:"add",id:pl.id,titles});S.selected.clear();setView({kind:"pl",id:pl.id});}
+function addMenu(e,keys){const pls=S.lists.playlists;menu(e,[[`${keys.length}곡 담기`,null]].concat(pls.map((p)=>[`♪ ${p.name} (${p.items.length})`,async()=>{await listsApi({op:"add",id:p.id,keys});S.selected.clear();render();}])).concat([["+ 새 재생목록에",()=>newList(null,keys)]]));}
+async function newList(folder=null,keys=[]){const name=await ask("재생목록 이름","새 재생목록");if(name===null)return;await listsApi({op:"create",name,folder});const pl=S.lists.playlists.at(-1);if(keys.length)await listsApi({op:"add",id:pl.id,keys});S.selected.clear();setView({kind:"pl",id:pl.id});}
 async function newFolder(parent=null){const name=await ask("폴더 이름","새 폴더");if(name===null)return;await listsApi({op:"folder_create",name,parent});renderTree();}
 async function renamePl(id){const pl=S.lists.playlists.find((p)=>p.id===id);const name=await ask("이름 변경",pl.name);if(name===null)return;await listsApi({op:"rename",id,name});render();}
 async function renameFolder(id){const f=S.lists.folders.find((x)=>x.id===id);const name=await ask("폴더 이름",f.name);if(name===null)return;await listsApi({op:"folder_rename",id,name});renderTree();}

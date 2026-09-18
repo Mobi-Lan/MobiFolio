@@ -25,7 +25,7 @@
 - `get_activity.Performance` 에 연주 상태가 온다: `IsPlaying` `MusicTitle`(「악보: 」접두 없음) `InstrumentName` `TotalDurationSeconds` `ElapsedSeconds` `RemainingSeconds` `IsLoop`. 재생 감시·진행 막대·순차 재생은 이걸 쓴다 (`IsAutoPlaying` 은 자동 사냥용이라 연주와 무관).
 - `play_music_score` 는 즉시 반환(비블로킹). `stop_action` 은 연주 중이 아니면 `invalid_state`.
 - `last-response.json` 폴백은 이번 호출 이후에 갱신된 파일만 믿는다(예전 응답이 이번 결과로 둔갑하지 않게).
-- 동명 악보는 CLI 가 임의 선택. 목록의 「동명 N」 표시로 알려 준다. 모든 제목이 `악보: ` 접두로 온다(정규화에서 제거, 재생엔 원본 사용).
+- 동명 악보는 앱 안에서 `제목#n`(보관함 순서) 내부 키로 따로 관리한다(선택·재생목록·최근 재생, `library.item_key`). 예전 제목 키·사라진 채번은 같은 제목의 첫 장으로 잇는다(`resolve_key`). 재생은 여전히 제목으로 보내므로 CLI 가 같은 제목 중 하나를 임의 선택 — 목록의 「동명 N」·`#n` 표시로 알려 준다. 모든 제목이 `악보: ` 접두로 온다(정규화에서 제거, 재생엔 원본 사용).
 - 실행 명령은 최대 9분 블로킹 가능 → 타임아웃 11분.
 
 ## 보안 (2026-09-17 2차 QA 반영)
