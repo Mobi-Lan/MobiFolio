@@ -1,7 +1,7 @@
 {
   "name": "mobifolio",
   "productName": "모비폴리오",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "description": "MobiFolio — MABINOGI MOBILE FAN PROJECT: 내 악기·악보 재생목록",
   "main": "main.js",
   "author": "란님",
