@@ -1,6 +1,11 @@
-"""릴리스 파일을 소개 페이지에 반영하고 배포까지 한다 — release.cmd 가 부른다.
+"""릴리스 파일을 소개 페이지에 반영하고 배포까지 한다 — 배포는 --publish 를 줄 때만.
 
-  python scripts\\publish_promo.py --version 0.2.5 --base https://fo.mobimml.com --promo ..\\MobiFolio_promo
+  python scripts\\publish_promo.py --version 0.2.5 --base https://…             # 무엇이 올라갈지 보여만 줌
+  python scripts\\publish_promo.py --version 0.2.5 --base https://… --publish   # 실제 배포
+
+**빌드는 배포가 아니다.** release.cmd 는 --publish 없이 부르므로 개발 중 빌드는 사이트에 나가지 않는다.
+사이트의 latest.json 이 바뀌는 순간 설치된 앱들이 그 판으로 자동 업데이트되므로,
+어느 판을 내보낼지는 사람이 고른다 (scripts\\publish.cmd).
 
 소개 페이지 폴더(`<promo>\\site`)는 배포 저장소(Mobi-Lan/MobiFolio_WEB)의 작업 복사본이다.
 여기에 쓰고 커밋·푸시하면 Cloudflare Pages 가 몇 분 안에 https://fo.mobimml.com 에 올린다.
@@ -64,7 +69,9 @@ def main() -> int:
     ap.add_argument("--promo", default=os.path.join(HERE, "..", "..", "MobiFolio_promo"))
     ap.add_argument("--release", default=os.path.join(HERE, "..", "release"))
     ap.add_argument("--notes", default="")
-    ap.add_argument("--no-push", action="store_true", help="커밋만 하고 푸시하지 않는다")
+    ap.add_argument("--publish", action="store_true",
+                    help="실제로 배포한다. 이 옵션이 없으면 무엇이 올라갈지 보여만 주고 아무것도 건드리지 않는다.")
+    ap.add_argument("--no-push", action="store_true", help="--publish 와 함께: 커밋만 하고 푸시하지 않는다")
     a = ap.parse_args()
     ver, base = a.version, a.base.rstrip("/")
     promo = os.path.abspath(a.promo)
@@ -95,6 +102,20 @@ def main() -> int:
         print(f"[promo] {lite_name} 이 이미 있는데 내용이 다릅니다.\n"
               f"        같은 번호로 다시 구우면 이미 받은 사람은 자동 업데이트를 못 탑니다.\n"
               f"        app\\package.json 의 버전을 올리고 다시 빌드하세요."); return 1
+
+    # 배포는 명시적으로 허락할 때만 한다 — 빌드할 때마다 공개되면 개발 중인 판이 사용자에게 내려간다.
+    # (latest.json 이 바뀌는 순간 설치된 앱들이 그 판으로 자동 업데이트된다)
+    if not a.publish:
+        live = "?"
+        cur = os.path.join(site, "latest.json")
+        if os.path.isfile(cur):
+            try:
+                live = json.load(open(cur, encoding="utf-8")).get("version", "?")
+            except (OSError, ValueError):
+                pass
+        print(f"[promo] 빌드 {ver} — 배포하지 않았습니다 (사이트는 {live} 그대로).")
+        print(f"[promo] 이 판을 사용자에게 내보내려면:  scripts\\publish.cmd {ver}")
+        return 0
 
     # 1) exe — 새 판을 넣고, 직전 KEEP_OLD 판만 남기고 그보다 옛 판은 지운다
     shutil.copy2(src, dst)
