@@ -130,6 +130,8 @@ def respond(command: str, body) -> tuple[int, object]:
                 ("stop_action", "Stop the current action", ""),
                 ("get_activity", "Query current activity", ""),
                 ("get_near_pcs", "Query nearby players", ""),
+                ("get_current_environment", "Query current location / weather / time", ""),
+                ("get_altering_works", "Query altering works", ""),
             )]}
 
     if command == "get_instruments":
@@ -141,6 +143,21 @@ def respond(command: str, body) -> tuple[int, object]:
 
     if command == "get_activity":
         return 0, {"Performance": _performance()}
+
+    if command == "get_current_environment":
+        h = int(time.time() // 90) % 24   # 에린 시간은 현실 90초에 1시간 — 데모용 근사
+        return 0, {"ChannelDisplayName": "3채널", "GameSpaceDisplayName": "가이레흐 언덕", "WorldPosition": {"x": 1234.5, "y": 67.8, "z": 910.1},
+                   "Weather": "맑음" if h % 3 else "비", "ErinnNow": f"에린력 2959년 2월 45일 {'오전' if h < 12 else '오후'} {h % 12 or 12:02d}:{int(time.time() % 90 / 1.5):02d} ({'낮' if 6 <= h < 18 else '밤'})",
+                   "Housing": {"IsInHousing": False, "IsOwnedHousing": False, "CanEnterHousing": True, "CannotEnterHousingReason": "", "CanExitHousing": False}}
+
+    if command == "get_altering_works":
+        t0 = _perf.get("_alter_t0") or time.time(); _perf["_alter_t0"] = t0
+        el = time.time() - t0
+        rows = [("금속 추출물", "금속 가공 시설", 455), ("목재 추출물", "목재 가공 시설", 3590), ("가죽 추출물", "가죽 가공 시설", 15555),
+                ("옷감 추출물", "옷감 가공 시설", 3316), ("약품 추출물", "약품 가공 시설", 4011), ("금속 추출물", "금속 가공 시설", 0), ("약품 추출물", "약품 가공 시설", 0)]
+        works = [{"DisplayName": n, "FacilityName": f, "State": "Completed" if max(0, r - el) <= 0 else "InProgress", "IsCompleted": max(0, r - el) <= 0,
+                  "RemainingSeconds": int(max(0, r - el))} for n, f, r in rows]
+        return 0, {"completedCount": sum(1 for w in works if w["IsCompleted"]), "works": works}
 
     if command == "get_near_pcs":
         me = _performance()

@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>모비폴리오 오버레이</title>
+<style>
+/* 게임 위에 뜨는 투명 창 — 항상 어두운 유리 패널. 배경은 완전 투명(창이 투명). */
+:root{--ink:#f1f4f9;--ink2:#c6cfdc;--muted:#8c98ab;--gold:#f0c56a;--gold2:#ffd98a;--ok:#5ee6a0;--pink:#ff7aa2;--blue:#7fb4ff;--panel:14,20,34;--alpha:.85;--scale:1}
+*{box-sizing:border-box}html,body{margin:0;height:100%;background:transparent;overflow:hidden}
+body{font:13px/1.35 "Pretendard","Malgun Gothic","Apple SD Gothic Neo",system-ui,sans-serif;color:var(--ink);user-select:none;-webkit-user-select:none;-webkit-app-region:drag;padding:4px}
+#root{zoom:var(--scale);display:flex;flex-wrap:wrap;gap:6px;align-items:flex-start;transition:padding-bottom .2s}
+body.banner #root{padding-bottom:42px}   /* 자막이 뜨는 동안만 자리를 비워 가려지지 않게 */
+.box{border-radius:11px;padding:7px 11px;background:rgba(var(--panel),var(--alpha));border:1px solid rgba(255,255,255,.10);box-shadow:0 2px 10px rgba(0,0,0,.45);min-width:0}
+.k{font-size:10.5px;letter-spacing:.12em;color:var(--muted);text-transform:uppercase}
+.row{display:flex;align-items:center;gap:8px;min-width:0}
+/* 연주 */
+#perf{min-width:260px;max-width:460px}
+#perf .t{font-weight:800;font-size:15px;color:var(--gold2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0}
+#perf .s{font-size:11.5px;color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#bar{height:4px;border-radius:2px;background:rgba(255,255,255,.12);margin:6px 0 3px;overflow:hidden}#bar i{display:block;height:100%;width:0;background:var(--gold);transition:width .5s linear}
+.tag{font-size:10.5px;padding:1px 7px;border-radius:999px;background:rgba(240,197,106,.18);color:var(--gold2);border:1px solid rgba(240,197,106,.35);white-space:nowrap}
+.tag.ok{background:rgba(94,230,160,.16);color:var(--ok);border-color:rgba(94,230,160,.35)}
+#near{display:flex;flex-direction:column;gap:2px;margin-top:5px;font-size:11.5px;color:var(--ink2)}
+#near div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}#near b{color:var(--ink)}
+/* 자막(방송 모션): 새 연주가 시작되면 왼쪽에서 밀려 들어왔다가 사라진다 */
+#banner{position:fixed;left:8px;bottom:8px;max-width:calc(100% - 16px);padding:8px 14px;border-radius:12px;background:linear-gradient(90deg,rgba(240,197,106,.95),rgba(255,138,31,.92));color:#1a0c00;font-weight:800;box-shadow:0 6px 20px rgba(0,0,0,.5);transform:translateX(-120%);opacity:0;transition:transform .45s cubic-bezier(.2,.9,.3,1.2),opacity .3s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;-webkit-app-region:no-drag;pointer-events:none}
+#banner.on{transform:none;opacity:1}#banner small{font-weight:600;opacity:.8;margin-left:8px}
+/* 에린 */
+#env .row{gap:10px;flex-wrap:wrap}#env b{color:var(--gold2)}#env .sep{width:1px;height:12px;background:rgba(255,255,255,.18)}
+/* 가공 */
+#alter .k{margin-bottom:5px}#alter .k b{color:var(--gold2);margin-left:6px;letter-spacing:0;text-transform:none;font-size:11px}
+#chips{display:flex;flex-wrap:wrap;gap:5px}
+.chip{position:relative;padding:4px 9px 5px;border-radius:9px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);min-width:88px}
+.chip .n{font-size:11px;color:var(--ink2)}.chip .r{font-size:13px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--ink)}
+.chip .r.done{color:var(--ok)}.chip .cnt{position:absolute;top:-6px;right:-5px;min-width:16px;height:16px;border-radius:8px;background:var(--gold);color:#1a0c00;font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center;padding:0 4px}
+.chip .pb{height:3px;border-radius:2px;background:rgba(255,255,255,.12);margin-top:4px;overflow:hidden}.chip .pb i{display:block;height:100%;background:var(--blue)}
+/* 잠금 표시 · 드래그 안내 */
+#lock{position:fixed;top:6px;right:8px;font-size:10px;color:var(--muted);padding:2px 6px;border-radius:6px;background:rgba(0,0,0,.45);-webkit-app-region:no-drag}
+#lock.on{color:var(--gold2)}
+.dim{color:var(--muted)}
+</style>
+</head>
+<body>
+<div id="root">
+  <div class="box" id="perf" hidden>
+    <div class="row"><span class="k">연주</span><span class="tag" id="ensTag" hidden>합주</span></div>
+    <div class="row"><span class="t" id="title">—</span></div>
+    <div class="s" id="sub"></div>
+    <div id="bar"><i id="prog"></i></div>
+    <div id="near"></div>
+  </div>
+  <div class="box" id="env" hidden><div class="row"><span id="erinn"></span><span class="sep"></span><span id="weather"></span><span class="sep"></span><span id="place"></span></div></div>
+  <div class="box" id="alter" hidden><div class="k">가공 현황<b id="alterN"></b></div><div id="chips"></div></div>
+</div>
+<div id="banner"></div>
+<div id="lock">드래그로 이동 · F8 관통 · F9 숨김</div>
+<script>
+const $=(id)=>document.getElementById(id);
+const TOKEN="__MOBIFOLIO_TOKEN__";
+const api=async(path)=>{try{const r=await fetch(path,{headers:{"X-Requested-With":"mobifolio","X-MobiFolio-Token":TOKEN},cache:"no-store"});return await r.json();}catch{return null;}};
+const esc=(s)=>String(s??"").replace(/[&<>"]/g,(c)=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const fmt=(s)=>{s=Math.max(0,Math.floor(s||0));const h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=s%60;return h?`${h}:${String(m).padStart(2,"0")}:${String(x).padStart(2,"0")}`:`${m}:${String(x).padStart(2,"0")}`;};
+const tkey=(s)=>String(s||"").replace(/^악보\s*[:：]\s*/,"").toLowerCase().replace(/[\s\-_·•.,()\[\]{}~!?/\\|:;"'`+*&%$#@^=<>【】「」『』〈〉《》]+/g,"");
+let cfg={ov_perf:true,ov_nearby:false,ov_env:true,ov_alter:true,ov_scale:100,ov_alpha:85,ov_banner_sec:6};
+let backoff=0;   // 게임이 꺼져 있으면(CLI 실패) 폴링을 늦춘다
+const seen=new Map();   // 주변 연주 자막: 이름+곡 → 마지막 본 시각 (새로 시작한 연주만 자막)
+let bannerT=null; const bannerQ=[];
+function banner(txt){if(bannerQ.length>4)return;bannerQ.push(txt);if(!bannerT)nextBanner();}
+function nextBanner(){const b=$("banner");const t=bannerQ.shift();if(!t){b.classList.remove("on");document.body.classList.remove("banner");bannerT=null;return;}b.innerHTML=t;b.classList.add("on");document.body.classList.add("banner");bannerT=setTimeout(()=>{b.classList.remove("on");bannerT=setTimeout(nextBanner,450);},(cfg.ov_banner_sec||6)*1000);}
+async function loadCfg(){const d=await api("/api/settings?nocli=1");if(!d||!d.settings)return;cfg={...cfg,...d.settings};
+  document.documentElement.style.setProperty("--scale",String((cfg.ov_scale||100)/100));document.documentElement.style.setProperty("--alpha",String((cfg.ov_alpha??85)/100));
+  $("perf").hidden=!cfg.ov_perf;$("env").hidden=!cfg.ov_env;$("alter").hidden=!cfg.ov_alter;}
+let mine={title:"",remain:null,at:0};
+async function pollPerf(){if(!cfg.ov_perf)return;const a=await api("/api/activity");if(!a||!a.ok){backoff=Math.min(backoff+1,5);return;}backoff=0;const p=(a.body&&a.body.Performance)||{};
+  if(p.IsPlaying){$("title").textContent=p.MusicTitle||"연주 중";const tot=p.TotalDurationSeconds||0,el=p.ElapsedSeconds||0;$("sub").textContent=`${p.InstrumentName||""}${p.IsLoop?" · 반복":""}${tot?` · ${fmt(el)} / ${fmt(tot)}`:""}`;$("prog").style.width=(tot?Math.min(100,el/tot*100):0)+"%";mine={title:p.MusicTitle||"",remain:tot?tot-el:null,at:Date.now()};}
+  else{$("title").textContent="대기";$("sub").innerHTML='<span class="dim">연주 중인 곡 없음</span>';$("prog").style.width="0%";mine={title:"",remain:null,at:0};}
+  $("bar").hidden=!p.IsPlaying;}
+async function pollNear(){if(!cfg.ov_perf)return;const e=await api("/api/ensemble");if(!e||!e.ok||!Array.isArray(e.players))return;const now=Date.now();
+  const playing=e.players.filter((x)=>x.playing&&x.title);const myT=tkey(mine.title);
+  const same=playing.filter((x)=>myT&&tkey(x.title)===myT&&(Number(x.channels)||0)>1);$("ensTag").hidden=!same.length;if(same.length)$("ensTag").textContent=`합주 ${same.length+1}명`;
+  for(const x of playing){const k=x.name+"|"+tkey(x.title);const first=!seen.has(k)||now-seen.get(k)>60000;seen.set(k,now);
+    if(first&&!(myT&&tkey(x.title)===myT&&Number(x.total)&&Number(x.elapsed)>5)){banner(`♪ ${esc(x.title)}<small>${esc(x.name||"")}${x.channels>1?` · ${x.channels}채널`:""}</small>`);}}
+  for(const [k,t] of seen)if(now-t>120000)seen.delete(k);
+  const near=$("near");if(cfg.ov_nearby&&playing.length){near.innerHTML=playing.slice(0,6).map((x)=>`<div>♪ <b>${esc(x.title)}</b> <span class="dim">${esc(x.name||"")}${x.remaining!=null?` · ${fmt(x.remaining)}`:""}${x.channels>1?` · ${x.channels}ch`:""}</span></div>`).join("");}else near.innerHTML="";}
+async function pollEnv(){if(!cfg.ov_env)return;const e=await api("/api/env");if(!e||!e.ok){$("erinn").innerHTML='<span class="dim">에린 시간 —</span>';return;}
+  const s=String(e.erinn??"");const night=/밤|night/i.test(s)||(()=>{const m=s.match(/(오전|오후)\s*(\d{1,2})/);if(!m)return false;let h=Number(m[2])%12+(m[1]==="오후"?12:0);return h<6||h>=18;})();
+  $("erinn").innerHTML=`${night?"🌙":"☀️"} <b>${esc(s||"—")}</b>`;$("weather").textContent=e.weather||"";$("place").textContent=(e.channel?e.channel+" · ":"")+(e.place||"");}
+let alterMax=new Map();   // 시설별 처음 본 남은 시간(진행 막대의 분모)
+async function pollAlter(){if(!cfg.ov_alter)return;const d=await api("/api/altering");if(!d||!d.ok){$("chips").innerHTML='<span class="dim">가공 정보 —</span>';return;}
+  const fac=new Map();for(const w of d.works){const f=w.facility||w.name||"?";const g=fac.get(f)||{name:f.replace(/\s*가공\s*시설\s*$/,""),done:0,min:null,count:0};g.count++;if(w.done)g.done++;else if(g.min===null||w.remaining<g.min)g.min=w.remaining;fac.set(f,g);}
+  $("alterN").textContent=d.completed?`수령 가능 ${d.completed}건`:(fac.size?`${fac.size}곳 진행 중`:"진행 중인 가공 없음");
+  $("chips").innerHTML=[...fac.values()].map((g)=>{const key=g.name;const mx=Math.max(alterMax.get(key)||0,g.min||0);if(g.min)alterMax.set(key,mx);const pct=g.min&&mx?100-Math.round(g.min/mx*100):100;
+    return `<div class="chip">${g.done?`<span class="cnt">${g.done}</span>`:""}<div class="n">${esc(g.name)}</div><div class="r ${g.min===null?"done":""}">${g.min===null?"완료":fmt(g.min)}</div><div class="pb"><i style="width:${pct}%"></i></div></div>`;}).join("")||'<span class="dim">진행 중인 가공 없음</span>';}
+(async()=>{await loadCfg();pollPerf();pollNear();pollEnv();pollAlter();
+  setInterval(loadCfg,10000);
+  setInterval(()=>{if(backoff&&Date.now()%(backoff*5000)>2000)return;pollPerf();},2000);
+  setInterval(()=>{if(backoff)return;pollNear();},5000);
+  setInterval(pollEnv,60000);setInterval(pollAlter,30000);
+  if(window.mobifolio&&window.mobifolio.overlay){const set=(s)=>{$("lock").textContent=s.clickThrough?"관통 중 · F8 로 해제":"드래그로 이동 · F8 관통 · F9 숨김";$("lock").classList.toggle("on",!!s.clickThrough);};window.mobifolio.overlay.onState(set);window.mobifolio.overlay.state().then(set).catch(()=>{});}
+})();
+</script>
+</body>
+</html>

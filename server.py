@@ -72,7 +72,7 @@ PARENT = os.environ.get("MABI_PARENT_PID", "")
 LITE_FILE = os.path.join(BASE, "lite.json")   # 경량판이 떠 있는 포트 (두 번째 실행이 창만 다시 열 때 씀)
 UPDATE_DIR = os.path.join(BASE, "update")     # 받은 새 exe 와 교체 스크립트
 MAX_UPDATE_BYTES = 200 * 1024 * 1024
-VERSION = "0.2.6"
+VERSION = "0.2.7"
 _srv = None   # ThreadingHTTPServer (종료용)
 
 
@@ -481,6 +481,29 @@ def _ensemble() -> dict:
     return out
 
 
+def _environment() -> dict:
+    """get_current_environment 를 간추린다 (오버레이의 에린 시간·날씨·지역 배지용)."""
+    r = _cli("get_current_environment", timeout=30)
+    b = r.body if isinstance(r.body, dict) else {}
+    h = b.get("Housing") if isinstance(b.get("Housing"), dict) else {}
+    return {"ok": r.ok, "error": r.error, "message": r.message,
+            "channel": str(b.get("ChannelDisplayName") or ""), "place": str(b.get("GameSpaceDisplayName") or ""),
+            "weather": str(b.get("Weather") or ""), "erinn": b.get("ErinnNow"), "inHousing": bool(h.get("IsInHousing"))}
+
+
+def _altering() -> dict:
+    """get_altering_works 를 간추린다 (오버레이의 가공 현황용). 시설별로 묶는 건 화면이 한다."""
+    r = _cli("get_altering_works", timeout=30)
+    b = r.body if isinstance(r.body, dict) else {}
+    works = []
+    for w in (b.get("works") or []) if isinstance(b.get("works"), list) else []:
+        if not isinstance(w, dict):
+            continue
+        works.append({"name": str(w.get("DisplayName") or ""), "facility": str(w.get("FacilityName") or ""),
+                      "state": str(w.get("State") or ""), "done": bool(w.get("IsCompleted")), "remaining": w.get("RemainingSeconds") or 0})
+    return {"ok": r.ok, "error": r.error, "message": r.message, "completed": b.get("completedCount") or 0, "works": works}
+
+
 def _activity() -> dict:
     a = _cli("get_activity", timeout=30)
     perf = (a.body or {}).get("Performance") if isinstance(a.body, dict) else None
@@ -787,6 +810,14 @@ class H(SimpleHTTPRequestHandler):
             if not self._guard():
                 return _json(self, {"ok": False, "error": "forbidden"}, 403)
             return _json(self, _ensemble())
+        if u.path == "/api/env":   # 오버레이: 에린 시간·날씨·지역 (읽기 전용)
+            if not self._guard():
+                return _json(self, {"ok": False, "error": "forbidden"}, 403)
+            return _json(self, _environment())
+        if u.path == "/api/altering":   # 오버레이: 가공 대기열 (읽기 전용)
+            if not self._guard():
+                return _json(self, {"ok": False, "error": "forbidden"}, 403)
+            return _json(self, _altering())
         if u.path == "/api/hold":   # 창이 살아 있는 동안 열어 두는 연결 (경량판 종료 판정). 5초마다 한 바이트를 보내 끊김을 감지
             if not self._guard():
                 return _json(self, {"ok": False, "error": "forbidden"}, 403)
@@ -833,6 +864,8 @@ class H(SimpleHTTPRequestHandler):
             return _json(self, {"ok": False, "error": "not_found"}, 404)
         if u.path in ("/", "/index.html"):
             return self._serve_index()
+        if u.path == "/overlay.html":   # 일렉트론 오버레이 창 (같은 토큰·CSP)
+            return self._serve_index("overlay.html")
         if u.path.endswith((".py", ".tmp", ".json", ".log")) or "/." in u.path:   # ui/ 아래에 없지만, 혹시 몰라 원천 차단
             return _json(self, {"ok": False, "error": "not_found"}, 404)
         return super().do_GET()
@@ -843,10 +876,10 @@ class H(SimpleHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         super().end_headers()
 
-    def _serve_index(self):
-        """index.html 에 실행 토큰을 심고, 인라인 스크립트 해시로 CSP 를 건다 (외부 스크립트·인라인 핸들러 전부 차단)."""
+    def _serve_index(self, name: str = "index.html"):
+        """index.html(또는 overlay.html) 에 실행 토큰을 심고, 인라인 스크립트 해시로 CSP 를 건다 (외부 스크립트·인라인 핸들러 전부 차단)."""
         try:
-            with open(os.path.join(UI_DIR, "index.html"), "rb") as f:
+            with open(os.path.join(UI_DIR, name), "rb") as f:
                 html = f.read()
         except OSError:
             return _json(self, {"ok": False, "error": "ui_missing"}, 500)

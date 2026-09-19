@@ -193,6 +193,20 @@ dialog{background:var(--card);color:var(--ink);border:1px solid var(--line);bord
     <label>업데이트 확인 주소</label><input id="sUpdUrl" placeholder="https://…/latest.json (경량판 자동 업데이트)">
     <span class="hint">비우면 확인하지 않습니다. 앱은 이 주소의 작은 JSON 만 읽고, 아무 정보도 보내지 않습니다.</span>
     <label>시작 시 업데이트 확인</label><label style="color:var(--ink2);display:flex;gap:8px;align-items:center"><input type="checkbox" id="sUpdChk"> 새 버전이 있으면 상단에 알림</label>
+    <div id="ovSec" hidden style="grid-column:1/-1;margin:4px 0 2px;padding:10px 12px;border:1px solid var(--goldline);border-radius:10px;background:var(--goldwash)">
+      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><b style="color:var(--strong);flex:1">게임 위 오버레이</b>
+        <button class="small pri" id="ovToggle">오버레이 켜기</button><button class="small ghost" id="ovClick">클릭 관통</button><button class="small ghost" id="ovReset" title="창 위치·크기를 기본값으로">위치 초기화</button></div>
+      <div class="note" style="margin-top:5px">투명 창을 게임 위에 띄워 연주 중인 곡·주변 연주·에린 시간·가공 현황을 보여줍니다. 창을 끌어 옮기고, <b>F9</b> 로 보이기·숨기기, <b>F8</b> 로 클릭 관통(게임 조작이 창을 통과)합니다.</div>
+      <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:8px;font-size:12.5px;color:var(--ink2)">
+        <label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="ovPerf"> 연주 중인 곡·합주</label>
+        <label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="ovNearby"> 주변 연주자 목록 상시</label>
+        <label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="ovEnv"> 에린 시간·날씨·지역</label>
+        <label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="ovAlter"> 가공 현황</label></div>
+      <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:8px;font-size:12.5px;color:var(--ink2);align-items:center">
+        <label>크기 <input id="ovScale" type="number" min="50" max="250" step="5" style="width:64px;padding:4px 6px">%</label>
+        <label>배경 불투명도 <input id="ovAlpha" type="number" min="10" max="100" step="5" style="width:64px;padding:4px 6px">%</label>
+        <label>주변 연주 자막 <input id="ovBanner" type="number" min="1" max="60" step="1" style="width:56px;padding:4px 6px">초</label></div>
+    </div>
     <label>합주 인식</label><label style="color:var(--ink2);display:flex;gap:8px;align-items:center"><input type="checkbox" id="sEns"> 주변에 같은 곡을 여러 채널로 연주하는 사람이 있거나 내 보관함에 없는 곡을 연주 중이면 합주로 보고, 상대 곡 길이에 맞춰 내 연주를 끝냄</label>
     <label>시작 시 자동 갱신</label><label style="color:var(--ink2);display:flex;gap:8px;align-items:center"><input type="checkbox" id="sAuto"> CLI 연결돼 있으면 악기·악보를 다시 받음</label>
   </div>
@@ -590,9 +604,14 @@ $("btnSync").onclick=async()=>{const b=$("btnSync"),html=b.innerHTML;b.disabled=
 $("btnReport").onclick=async()=>{const d=await api("/api/normalize");const s=d.summary;$("repMeta").textContent=`${s.count}곡 · 인식 ${s.count-s.other} · 기타 ${s.other}`;$("repBody").textContent=d.rows.map((r)=>`${r.bucket==="other"?"기타":"인식"} ${r.rule.padEnd(6)} | ${r.title}\n      → 아티스트 [${r.artist}] 곡 [${r.song}]${r.variant?` 변형 ${r.variant}`:""}${r.tags.length?` 태그 ${r.tags.join(",")}`:""}${r.removed.length?` 제거 ${r.removed.join(" ")}`:""}`).join("\n");$("rep").showModal();};
 let sInst="";
 $("btnSettings").onclick=async()=>{$("sUpdBox").hidden=true;$("sSave").disabled=$("sUpdNow").disabled=true;$("set").showModal();const d=await api("/api/settings?nocli=1");if(!d||!d.settings){$("sCliHint").textContent="설정을 불러오지 못했습니다: "+((d&&(d.message||d.error))||"");return;}const s=d.settings;$("sSave").disabled=$("sUpdNow").disabled=false;api("/api/health").then((h)=>{$("sVer").textContent=h&&h.version?`현재 버전 v${h.version}${h.lite?" · 경량판":""}`:"";});$("sCli").value=s.cli_exe||"";$("sUpdUrl").value=s.update_url||"";$("sUpdChk").checked=!!s.update_check;$("sGap").value=s.gap_sec;$("sMargin").value=s.advance_margin;$("sStop").checked=!!s.stop_before_play;$("sAuto").checked=!!s.auto_sync;$("sEns").checked=s.ensemble!==false;sInst=s.default_inst||"";
+  $("ovPerf").checked=s.ov_perf!==false;$("ovNearby").checked=!!s.ov_nearby;$("ovEnv").checked=s.ov_env!==false;$("ovAlter").checked=s.ov_alter!==false;$("ovScale").value=s.ov_scale??100;$("ovAlpha").value=s.ov_alpha??85;$("ovBanner").value=s.ov_banner_sec??6;
+  $("ovSec").hidden=!(window.mobifolio&&window.mobifolio.overlay);if(!$("ovSec").hidden)window.mobifolio.overlay.state().then(ovState).catch(()=>{});
   ddMake($("sInstDd"),instItemsSet,()=>sInst,(v)=>{sInst=v;});$("sCliHint").textContent=cliHint(d.cli||S.cliInfo);$("sCli").focus();};
+// 오버레이(정식판 일렉트론에서만): preload 가 window.mobifolio.overlay 를 준다
+function ovState(st){if(!st)return;$("ovToggle").textContent=st.visible?"오버레이 끄기":"오버레이 켜기";$("ovToggle").className="small "+(st.visible?"ghost":"pri");$("ovClick").textContent=st.clickThrough?"관통 해제 (F8)":"클릭 관통 (F8)";$("ovClick").classList.toggle("pri",!!st.clickThrough);}
+if(window.mobifolio&&window.mobifolio.overlay){const ov=window.mobifolio.overlay;ov.onState(ovState);$("ovToggle").onclick=()=>ov.toggle().then(ovState);$("ovClick").onclick=()=>ov.state().then((st)=>ov.clickThrough(!st.clickThrough)).then(ovState);$("ovReset").onclick=()=>ov.reset().then(ovState);}
 const cliHint=(c)=>!c?"—":c.found?`감지된 경로: ${c.exe} · ${c.pipe==="connected"?"연결됨":"끊김 "+(c.reason||c.status_error||"")}${c.override_invalid?" · 설정한 경로가 없어 기본 경로를 씁니다":""}`:"실행파일을 찾지 못했습니다";
-$("sSave").onclick=async()=>{const r=await api("/api/settings",{settings:{update_url:$("sUpdUrl").value.trim(),update_check:$("sUpdChk").checked,cli_exe:$("sCli").value.trim(),gap_sec:Number($("sGap").value)||0,advance_margin:Number($("sMargin").value)||0,default_inst:sInst,stop_before_play:$("sStop").checked,auto_sync:$("sAuto").checked,ensemble:$("sEns").checked}});
+$("sSave").onclick=async()=>{const r=await api("/api/settings",{settings:{update_url:$("sUpdUrl").value.trim(),update_check:$("sUpdChk").checked,cli_exe:$("sCli").value.trim(),gap_sec:Number($("sGap").value)||0,advance_margin:Number($("sMargin").value)||0,default_inst:sInst,stop_before_play:$("sStop").checked,auto_sync:$("sAuto").checked,ensemble:$("sEns").checked,ov_perf:$("ovPerf").checked,ov_nearby:$("ovNearby").checked,ov_env:$("ovEnv").checked,ov_alter:$("ovAlter").checked,ov_scale:Number($("ovScale").value)||100,ov_alpha:Number($("ovAlpha").value)||85,ov_banner_sec:Number($("ovBanner").value)||6}});
   if(!r.ok){$("sCliHint").textContent="저장 실패: "+(r.message||r.error||"");return;}S.settings=r.settings;$("sCliHint").textContent=cliHint(r.cli||S.cliInfo);$("set").close();await refreshState();$("instDd")._refresh&&$("instDd")._refresh();renderMid();};
 /* ── 자동 업데이트 (경량판) ── */
 let updInfo=null;

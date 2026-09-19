@@ -217,9 +217,16 @@ DEFAULT_SETTINGS = {
     "stop_before_play": True, # 재생 전 현재 연주를 먼저 정지
     "update_url": "https://fo.mobimml.com/latest.json",   # 경량판 자동 업데이트: latest.json 주소 (https). 비우면 확인하지 않는다
     "update_check": True,     # 시작 시 업데이트 확인
+    "ov_perf": True,          # 오버레이(정식판): 연주 중인 곡·합주 표시
+    "ov_nearby": False,       # 오버레이: 주변 연주자 목록 상시 표시 (꺼도 새 연주가 시작되면 자막이 잠깐 뜬다)
+    "ov_env": True,           # 오버레이: 에린 시간·날씨·지역 배지
+    "ov_alter": True,         # 오버레이: 가공 시설 현황
+    "ov_scale": 100,          # 오버레이 크기 %
+    "ov_alpha": 85,           # 오버레이 배경 불투명도 %
+    "ov_banner_sec": 6,       # 주변 연주 자막 유지 시간(초)
     "ensemble": True,         # 합주 인식: 주변에 같은 곡을 다채널로 연주하는 사람이 있거나 내 보관함에 없는 곡을 연주 중이면, 상대 곡 길이에 맞춰 끝낸다
 }
-_RANGES = {"gap_sec": (0, 60), "advance_margin": (0, 30)}
+_RANGES = {"gap_sec": (0, 60), "advance_margin": (0, 30), "ov_scale": (50, 250), "ov_alpha": (10, 100), "ov_banner_sec": (1, 60)}
 
 
 def _coerce(k: str, v):

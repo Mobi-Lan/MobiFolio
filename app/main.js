@@ -1,7 +1,7 @@
 // 모비폴리오(MobiFolio) 일렉트론 셸 — 파이썬 백엔드(MobiFolioCore.exe 또는 server.py)를 띄우고 그 UI 를 창에 연다.
 // 배포판: 실행마다 빈 포트를 골라 백엔드를 띄우고, 한 번 쓰는 비밀 토큰을 넘긴다 (다른 프로세스가 포트를 선점해 우리 창에 끼어들지 못하게).
 // 창을 닫으면 백엔드에 정상 종료를 요청하고, 안 끝나면 강제 종료한다. 데이터는 %LOCALAPPDATA%\MobiFolio.
-const { app, BrowserWindow, shell, dialog, session, Menu } = require("electron");
+const { app, BrowserWindow, shell, dialog, session, Menu, globalShortcut, ipcMain, screen } = require("electron");
 const { spawn, spawnSync } = require("child_process");
 const path = require("path");
 const fs = require("fs");
@@ -20,6 +20,9 @@ try { fs.mkdirSync(DATA_BASE, { recursive: true }); } catch {}
 const LOG = path.join(DATA_BASE, "electron.log");
 let backend = null;   // 우리가 띄운 백엔드 프로세스
 let win = null;
+let overlay = null;   // 게임 위에 띄우는 투명 오버레이 창 (연주·에린 시간·가공 현황)
+let clickThrough = false;
+const OVERLAY_FILE = path.join(DATA_BASE, "overlay.json");   // {x,y,width,height,visible}
 
 const origin = () => `http://127.0.0.1:${PORT}`;
 
@@ -143,7 +146,8 @@ function createWindow() {
     width: 1280, height: 860, minWidth: 960, minHeight: 600,
     title: "모비폴리오", backgroundColor: "#101114", autoHideMenuBar: true, show: false, icon: path.join(__dirname, "icon", "MobiFolio.ico"),
     webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true, devTools: DEV,
-                      backgroundThrottling: false },   // 최소화해도 재생 감시(1초 폴링)·곡 전환 타이머가 늦춰지지 않게
+                      backgroundThrottling: false,   // 최소화해도 재생 감시(1초 폴링)·곡 전환 타이머가 늦춰지지 않게
+                      preload: path.join(__dirname, "preload.js") },   // window.mobifolio.overlay.* (오버레이 창 제어만)
   });
   win.once("ready-to-show", () => win.show());
   const isLocal = (u) => { try { return new URL(u).origin === origin(); } catch { return false; } };
@@ -153,14 +157,92 @@ function createWindow() {
   win.webContents.on("will-redirect", (e, url) => { if (!isLocal(url)) e.preventDefault(); });
   win.webContents.on("did-fail-load", (_e, code, desc) => { log("[mobifolio] did-fail-load", code, desc); if (code !== -3) fatal("화면을 열지 못했습니다", `${desc} (${code})`); });
   win.loadURL(origin() + "/");
-  win.on("closed", () => { win = null; });
+  win.on("closed", () => { win = null; if (overlay) { try { overlay.destroy(); } catch {} overlay = null; } });
+}
+
+/* ── 오버레이 창: 게임 위에 항상 떠 있는 투명 창. 페이지는 백엔드가 서빙(/overlay.html, 같은 토큰·CSP). ── */
+function loadOverlayBounds() {
+  try { const o = JSON.parse(fs.readFileSync(OVERLAY_FILE, "utf8")); return o && typeof o === "object" ? o : {}; } catch { return {}; }
+}
+function saveOverlayBounds(extra = {}) {
+  try {
+    const b = overlay && !overlay.isDestroyed() ? overlay.getBounds() : {};
+    const prev = loadOverlayBounds();
+    fs.writeFileSync(OVERLAY_FILE, JSON.stringify({ ...prev, ...b, ...extra }));
+  } catch {}
+}
+function overlayState() {
+  return { available: true, visible: !!(overlay && !overlay.isDestroyed() && overlay.isVisible()), clickThrough };
+}
+function broadcastOverlay() {
+  const st = overlayState();
+  for (const w of BrowserWindow.getAllWindows()) { try { w.webContents.send("overlay:state", st); } catch {} }
+}
+function createOverlay() {
+  if (overlay && !overlay.isDestroyed()) return overlay;
+  const wa = screen.getPrimaryDisplay().workAreaSize;
+  const saved = loadOverlayBounds();
+  const width = Math.min(Math.max(saved.width || 1000, 360), wa.width), height = Math.min(Math.max(saved.height || 250, 90), wa.height);
+  const x = Number.isFinite(saved.x) ? Math.min(Math.max(saved.x, 0), wa.width - 100) : Math.round((wa.width - width) / 2);
+  const y = Number.isFinite(saved.y) ? Math.min(Math.max(saved.y, 0), wa.height - 60) : 40;
+  overlay = new BrowserWindow({
+    width, height, x, y, frame: false, transparent: true, alwaysOnTop: true, resizable: true, skipTaskbar: true, hasShadow: false, show: false,
+    minWidth: 300, minHeight: 80, title: "모비폴리오 오버레이", backgroundColor: "#00000000",
+    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true, devTools: DEV, backgroundThrottling: false,
+                      preload: path.join(__dirname, "preload.js") },
+  });
+  overlay.setAlwaysOnTop(true, "screen-saver");   // 전체화면 게임 위에도 뜨게
+  overlay.setVisibleOnAllWorkspaces(true);
+  overlay.setMenuBarVisibility(false);
+  overlay.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  overlay.webContents.on("will-navigate", (e) => e.preventDefault());
+  overlay.loadURL(origin() + "/overlay.html");
+  overlay.on("moved", () => saveOverlayBounds()); overlay.on("resized", () => saveOverlayBounds());
+  overlay.on("closed", () => { overlay = null; broadcastOverlay(); });
+  overlay.setIgnoreMouseEvents(clickThrough, { forward: true });
+  return overlay;
+}
+function showOverlay(on) {
+  if (on) { createOverlay(); if (!overlay.isVisible()) overlay.showInactive(); }
+  else if (overlay && !overlay.isDestroyed()) overlay.hide();
+  saveOverlayBounds({ visible: !!on }); broadcastOverlay();
+  log("[mobifolio] overlay", on ? "shown" : "hidden");
+}
+function setClickThrough(on) {
+  clickThrough = !!on;
+  if (overlay && !overlay.isDestroyed()) overlay.setIgnoreMouseEvents(clickThrough, { forward: true });
+  saveOverlayBounds({ clickThrough }); broadcastOverlay();
+  log("[mobifolio] overlay click-through", clickThrough ? "on" : "off");
+}
+function resetOverlay() {
+  try { fs.unlinkSync(OVERLAY_FILE); } catch {}
+  const wasVisible = overlayState().visible;
+  if (overlay && !overlay.isDestroyed()) { overlay.destroy(); overlay = null; }
+  clickThrough = false;
+  if (wasVisible) showOverlay(true); else broadcastOverlay();
+}
+ipcMain.handle("overlay:state", () => overlayState());
+ipcMain.handle("overlay:show", (_e, on) => { showOverlay(!!on); return overlayState(); });
+ipcMain.handle("overlay:toggle", () => { showOverlay(!overlayState().visible); return overlayState(); });
+ipcMain.handle("overlay:click", (_e, on) => { setClickThrough(!!on); return overlayState(); });
+ipcMain.handle("overlay:reset", () => { resetOverlay(); return overlayState(); });
+function registerShortcuts() {
+  // F8: 클릭 관통 켜고 끄기 (관통 중엔 창을 잡을 수 없으니 이 키로만 푼다)  F9: 오버레이 보이기/숨기기
+  const ok1 = globalShortcut.register("F8", () => setClickThrough(!clickThrough));
+  const ok2 = globalShortcut.register("F9", () => showOverlay(!overlayState().visible));
+  log("[mobifolio] shortcuts F8", ok1 ? "ok" : "busy", "F9", ok2 ? "ok" : "busy");
 }
 
 app.whenReady().then(async () => {
   if (!gotLock) return;
   await startBackend();
   createWindow();
+  registerShortcuts();
+  const saved = loadOverlayBounds();
+  clickThrough = !!saved.clickThrough;
+  if (saved.visible) showOverlay(true);   // 지난번에 켜 두었으면 다시 띄운다
 });
+app.on("will-quit", () => { try { globalShortcut.unregisterAll(); } catch {} });
 let quitting = false;
 app.on("window-all-closed", () => { app.quit(); });
 app.on("before-quit", (e) => {
