@@ -1,4 +1,4 @@
-<h1 align="center">해당 프로젝트는 모비웍스로 통합되었으며 추가 개발되지않습니다. 하단 주소를 참조해주세요. <br/>(https://github.com/Mobi-Lan/MobiWorks)</h1>
+<h2 align="center">해당 프로젝트는 모비웍스로 통합되었으며 더이상 추가 개발되지않습니다.<br/> 하단 주소를 참조해주세요. <br/>(https://github.com/Mobi-Lan/MobiWorks)</h2>
 <hr/>
 
 <p align="center">
